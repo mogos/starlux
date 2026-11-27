@@ -9,6 +9,16 @@ import { linearPsnr, linearSsim, maxAbsoluteError } from "../ss/wallpaper/metric
 import { decodeRecipe, encodeRecipe } from "../ss/wallpaper/recipe.ss.ts";
 import { civilEdge, nextSolarBoundary, solarBucket } from "../ss/wallpaper/solar.ss.ts";
 import { FRAME, INPUT, LIGHT_BRIDGE, defaultWallpaperWords, mod, word } from "../ss/wallpaper/types.ss.ts";
+import {
+  TIER3_WORLD_UNIFORM_FLOATS,
+  WALLPAPER_TIER_G3,
+  WALLPAPER_TIER_L0,
+  WALLPAPER_TIER_M2,
+  buildStarluxWorldUniforms,
+  packStarluxWorldUniforms,
+  selectWallpaperTier,
+  worldUniformsDigest,
+} from "../ss/wallpaper/tier3_world.ss.ts";
 
 function buffer(size: number): number[] {
   const values: number[] = [];
@@ -124,5 +134,38 @@ export function main(seed: number): readonly number[] {
   const phase = temporalPhase(3250000);
   const sample = sampleTemporalMask(left, right, phase, 6, 6, 8, 8);
   if (temporalKnot(phase) !== 45 || sample < 120 || reconstructR8(124, 100) !== 92) return [-18];
-  return [digest, compareLossy(), sample, Math.floor(word(grid, 0) * 65535)];
+
+  // Ruling #27 Tier-3 G3 capability ladder + 60s hysteresis + 256-byte StarluxWorldUniforms parity
+  const caps = { webgpu: true, webgl2: true, webgl2Float: true, worldWebgl2Compat: true, reducedMotion: false };
+  const dropSerious = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 2, caps,
+    { onAcPower: true, batteryPct: 100, overloadFrames: 0, nominalHeadroomMs: 0, m2BudgetBreached: false });
+  const dropCrit = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 3, caps,
+    { onAcPower: true, batteryPct: 100, overloadFrames: 0, nominalHeadroomMs: 0, m2BudgetBreached: false });
+  const holdShort = selectWallpaperTier(WALLPAPER_TIER_M2(), WALLPAPER_TIER_G3(), 0, caps,
+    { onAcPower: true, batteryPct: 100, overloadFrames: 0, nominalHeadroomMs: 59999, m2BudgetBreached: false });
+  const promoteOk = selectWallpaperTier(WALLPAPER_TIER_M2(), WALLPAPER_TIER_G3(), 0, caps,
+    { onAcPower: true, batteryPct: 100, overloadFrames: 0, nominalHeadroomMs: 60000, m2BudgetBreached: false });
+  const dropBatt = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 0, caps,
+    { onAcPower: false, batteryPct: 15, overloadFrames: 0, nominalHeadroomMs: 90000, m2BudgetBreached: false });
+  if (dropSerious.tier !== WALLPAPER_TIER_M2() || !dropSerious.demoted || dropSerious.crossfadeMs !== 300) return [-19];
+  if (dropCrit.tier !== WALLPAPER_TIER_L0() || !dropCrit.demoted) return [-20];
+  if (holdShort.tier !== WALLPAPER_TIER_M2() || holdShort.promoted) return [-21];
+  if (promoteOk.tier !== WALLPAPER_TIER_G3() || !promoteOk.promoted) return [-22];
+  if (dropBatt.tier !== WALLPAPER_TIER_M2() || !dropBatt.demoted) return [-23];
+  const worldU = buildStarluxWorldUniforms({
+    solarElevationRad: 0.42, solarAzimuthRad: 1.1,
+    precipitation: 0.1, cloudCoverage: 0.35, fogDensity: 0.15, windSpeedMps: 6.5,
+    windDirX: 0.6, windDirZ: 0.8, gustPhase: 1.2, seasonPhase: 0.5,
+    osStateId: 1, osStateIntensity: 0.75, pulsePhase: 2.1, voiceRms: 0.32, polarity: 0,
+    camX: 0, camY: 2.5, camZ: 8, fovRad: 0.95, targetX: 0, targetY: 1, targetZ: 0, parallaxStrength: 0.3,
+    pointerX: 0.2, pointerY: -0.1, simTimeSec: 12.5, frameIndex: 1040,
+    activeTier: WALLPAPER_TIER_G3(), thermalTier: 0, lodLevel: 2, onBattery: false, is4k: true, exposureEv: 0.25,
+    lightAnchorX: 0.3, lightAnchorY: 0.9, lightAnchorZ: 0.3, lightKeyElevation: 0.82,
+    lightRimR: 0.92, lightRimG: 0.64, lightRimB: 0.32, hudScrimAlpha: 0.28,
+    width: 2560, height: 1440, settleBlend: 0, hudTopLumaTarget: 0.12, hudBottomLumaTarget: 0.14,
+  });
+  const packedWorld = buffer(TIER3_WORLD_UNIFORM_FLOATS());
+  if (packStarluxWorldUniforms(worldU, packedWorld) !== 0) return [-24];
+  const worldDigest = worldUniformsDigest(packedWorld);
+  return [digest, compareLossy(), sample, Math.floor(word(grid, 0) * 65535), worldDigest];
 }

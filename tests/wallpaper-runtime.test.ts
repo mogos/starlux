@@ -5,13 +5,14 @@ import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 import { createLightInput, defaultLightPolicy } from "../src/light/inputs.ts";
 import {
-  CONFIG, FRAME, INPUT, LIGHT_BRIDGE, STATE, WallpaperAssetBudget, WallpaperHost, WallpaperRuntime,
-  amberSurface, bakeExactWebP, bindWallpaperZenith, civilEdge, contrastRatio, decodeWallpaperLossless,
+  CONFIG, FRAME, INPUT, LIGHT_BRIDGE, STATE, TIER3_WORLD_UNIFORM_FLOATS, WALLPAPER_TIER_G3,
+  WALLPAPER_TIER_L0, WALLPAPER_TIER_M1, WALLPAPER_TIER_M2, WallpaperAssetBudget, WallpaperHost, WallpaperRuntime,
+  amberSurface, bakeExactWebP, bindWallpaperZenith, buildStarluxWorldUniforms, civilEdge, contrastRatio, decodeWallpaperLossless,
   decodeTemporalMasks, deltaR8, encodeResidual, encodeWallpaperLossless, exactWebPHeader, governFps, governLod, linearPsnr,
-  linearSsim, luminance, maxAbsoluteError, nextSolarBoundary, normalizeWallpaperPlanes, packRgb10, passesWallpaperQuality, readBE,
-  recipeWord, reconstructR8, reconstructResidual, roundEven, sampleTemporalMask, sha256, solarBucket,
+  linearSsim, luminance, maxAbsoluteError, nextSolarBoundary, normalizeWallpaperPlanes, packRgb10, packStarluxWorldUniforms, passesWallpaperQuality, readBE,
+  recipeWord, reconstructR8, reconstructResidual, roundEven, sampleTemporalMask, selectWallpaperTier, sha256, solarBucket,
   srgbLinear16, temporalKnot, temporalPhase, validResidual, validTemporalPlate, validWallpaperPyramid,
-  verifyLosslessWebP, vp8Rgb, wallpaperCodecMatrix, writeWallpaperLuminanceGrid,
+  verifyLosslessWebP, vp8Rgb, wallpaperCodecMatrix, worldUniformsDigest, writeWallpaperLuminanceGrid,
 } from "../src/wallpaper/index.ts";
 import type { ExactWebPPort, TemporalMaskDecoder, TemporalWallpaperPlate, WallpaperLod, WallpaperPyramid, WallpaperScheduler } from "../src/wallpaper/index.ts";
 
@@ -461,4 +462,94 @@ test("scrims preserve AA even for mid-luminance protected text", () => {
       if (ink < .5) expect(amberSurface(r! / 255, g! / 255, b! / 255)).toBe(false);
     }
   }
+});
+
+test("Tier-3 G3 capability ladder enforces 60s hysteresis promotion and instant thermal/battery demotion", () => {
+  const fullCaps = { webgpu: true, webgl2: true, webgl2Float: true, worldWebgl2Compat: true, reducedMotion: false };
+  const webgl2Only = { webgpu: false, webgl2: true, webgl2Float: true, worldWebgl2Compat: true, reducedMotion: false };
+  const weakWebgl2 = { webgpu: false, webgl2: true, webgl2Float: false, worldWebgl2Compat: true, reducedMotion: false };
+  const nominalAc = { onAcPower: true, batteryPct: 100, overloadFrames: 0, nominalHeadroomMs: 60000, m2BudgetBreached: false };
+
+  // User cap respected (never upgrades past userMaxTier)
+  const capped = selectWallpaperTier(WALLPAPER_TIER_M1(), WALLPAPER_TIER_M1(), 0, fullCaps, nominalAc);
+  expect(capped.tier).toBe(WALLPAPER_TIER_M1());
+  expect(capped.promoted).toBe(false);
+
+  // Instant thermal demotion: serious G3 -> M2, critical -> L0
+  const serious = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 2, fullCaps, nominalAc);
+  expect(serious.tier).toBe(WALLPAPER_TIER_M2());
+  expect(serious.tierCode).toBe("M2");
+  expect(serious.demoted).toBe(true);
+  expect(serious.crossfadeMs).toBe(300);
+
+  const critical = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 3, fullCaps, nominalAc);
+  expect(critical.tier).toBe(WALLPAPER_TIER_L0());
+  expect(critical.tierCode).toBe("L0");
+  expect(critical.demoted).toBe(true);
+
+  // Instant battery (<20%) and 30-frame overload demotion
+  const lowBatt = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 0, fullCaps, {
+    onAcPower: false, batteryPct: 19, overloadFrames: 0, nominalHeadroomMs: 120000, m2BudgetBreached: false,
+  });
+  expect(lowBatt.tier).toBe(WALLPAPER_TIER_M2());
+  expect(lowBatt.demoted).toBe(true);
+
+  const overload = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 0, fullCaps, {
+    onAcPower: true, batteryPct: 100, overloadFrames: 30, nominalHeadroomMs: 120000, m2BudgetBreached: false,
+  });
+  expect(overload.tier).toBe(WALLPAPER_TIER_M2());
+  expect(overload.demoted).toBe(true);
+
+  // 60s hysteresis blocks premature promotion and allows +1 promotion at 60000ms
+  const tooEarly = selectWallpaperTier(WALLPAPER_TIER_M2(), WALLPAPER_TIER_G3(), 0, fullCaps, {
+    onAcPower: true, batteryPct: 100, overloadFrames: 0, nominalHeadroomMs: 59999, m2BudgetBreached: false,
+  });
+  expect(tooEarly.tier).toBe(WALLPAPER_TIER_M2());
+  expect(tooEarly.promoted).toBe(false);
+
+  const ready = selectWallpaperTier(WALLPAPER_TIER_M2(), WALLPAPER_TIER_G3(), 0, fullCaps, nominalAc);
+  expect(ready.tier).toBe(WALLPAPER_TIER_G3());
+  expect(ready.renderer).toBe("webgpu");
+  expect(ready.promoted).toBe(true);
+
+  // WebGL2 compat & reduced motion static freeze
+  const gl2 = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 0, webgl2Only, nominalAc);
+  expect(gl2.tier).toBe(WALLPAPER_TIER_G3());
+  expect(gl2.renderer).toBe("webgl2");
+  const noFloat = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 0, weakWebgl2, nominalAc);
+  expect(noFloat.tier).toBe(WALLPAPER_TIER_M2());
+  const reduced = selectWallpaperTier(WALLPAPER_TIER_G3(), WALLPAPER_TIER_G3(), 0, { ...fullCaps, reducedMotion: true }, nominalAc);
+  expect(reduced.settledStatic).toBe(true);
+  expect(reduced.crossfadeMs).toBe(0);
+});
+
+test("Tier-3 StarluxWorldUniforms packs 256-byte std140 descriptor with one-way light anchor", () => {
+  const baseInput = {
+    solarElevationRad: 0.42, solarAzimuthRad: 1.1,
+    precipitation: 0.1, cloudCoverage: 0.35, fogDensity: 0.15, windSpeedMps: 6.5,
+    windDirX: 0.6, windDirZ: 0.8, gustPhase: 1.2, seasonPhase: 0.5,
+    osStateId: 1, osStateIntensity: 0.75, pulsePhase: 2.1, voiceRms: 0.32, polarity: 0,
+    camX: 0, camY: 2.5, camZ: 8, fovRad: 0.95, targetX: 0, targetY: 1, targetZ: 0, parallaxStrength: 0.3,
+    pointerX: 0.2, pointerY: -0.1, simTimeSec: 12.5, frameIndex: 1040,
+    activeTier: WALLPAPER_TIER_G3(), thermalTier: 0, lodLevel: 2, onBattery: false, is4k: true, exposureEv: 0.25,
+    lightAnchorX: 0.3, lightAnchorY: 0.9, lightAnchorZ: 0.3, lightKeyElevation: 0.82,
+    lightRimR: 0.92, lightRimG: 0.64, lightRimB: 0.32, hudScrimAlpha: 0.8,
+    width: 2560, height: 1440, settleBlend: 0, hudTopLumaTarget: 0.12, hudBottomLumaTarget: 0.14,
+  };
+  const u1 = buildStarluxWorldUniforms(baseInput);
+  // Changing solar elevation MUST NOT mutate one-way uLightAnchor supplied by @mogos/starlux/light
+  const u2 = buildStarluxWorldUniforms({ ...baseInput, solarElevationRad: -0.45, cloudCoverage: 0.95 });
+  expect(u1.uLightAnchor).toEqual(u2.uLightAnchor);
+  expect(u1.uLightRimScrim[3]).toBeLessThanOrEqual(0.45);
+  expect(u1.uThermalLod[0]).toBeLessThanOrEqual(1.25);
+
+  const packed = new Array<number>(TIER3_WORLD_UNIFORM_FLOATS()).fill(0);
+  expect(packStarluxWorldUniforms(u1, packed)).toBe(0);
+  expect(packed.length).toBe(64);
+  expect(packed.every((v) => Number.isFinite(v))).toBe(true);
+  expect(worldUniformsDigest(packed)).toBeGreaterThan(0);
+
+  // Settled cubemap drops targetFps to 0
+  const settled = buildStarluxWorldUniforms({ ...baseInput, settleBlend: 1 });
+  expect(settled.uRenderBudget[0]).toBe(0);
 });

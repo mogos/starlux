@@ -10,3 +10,4 @@ export * from "./codec_png.ss.ts";
 export * from "./codec.ss.ts";
 export * from "./metrics.ss.ts";
 export * from "./light_bridge.ss.ts";
+export * from "./tier3_world.ss.ts";

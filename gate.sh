@@ -38,7 +38,11 @@ bun test \
   tests/audio-catalog.test.ts \
   tests/audio-runtime.test.ts \
   tests/audio-mutations.test.ts \
-  tests/audio-om.test.ts
+  tests/audio-om.test.ts \
+  tests/wallpaper-catalog.test.ts \
+  tests/wallpaper-runtime.test.ts \
+  tests/wallpaper-om.test.ts \
+  tests/wallpaper-mutations.test.ts
 
 bun tests/mutations.ts
 bun tests/magnetic-mutations.ts
@@ -68,6 +72,13 @@ if ! rg -q '"ok"\s*:\s*true' <<< "$voice_output"; then
 fi
 
 starc test --all-targets --require-all --targets ts,rust,wasm,c tests/audio-parity.ss.ts --input 100
+
+wallpaper_output="$(starc test --all-targets --require-all --targets ts,rust,wasm,c tests/wallpaper-parity.ss.ts --input 1 --print-output)"
+printf '%s\n' "$wallpaper_output"
+if ! rg -q '^\[[1-9][0-9]*,' <<< "$wallpaper_output"; then
+  printf 'Wallpaper 4-target parity test failed behavioral checks\n' >&2
+  exit 1
+fi
 
 ./scripts/verify-c.sh
 ./scripts/verify-om.sh

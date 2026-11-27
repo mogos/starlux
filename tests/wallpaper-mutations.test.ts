@@ -24,6 +24,8 @@ const floors = {
   temporal: "M2 AV1 poster and delta R8 use absolute knots, advection and the VRAM cap",
   storage: "resident admission counts encoded and decoded allocations by identity",
   recipe: "L0 checksum protects canonical padding and preset configuration",
+  tier3Ladder: "Tier-3 G3 capability ladder enforces 60s hysteresis promotion and instant thermal/battery demotion",
+  tier3Uniforms: "Tier-3 StarluxWorldUniforms packs 256-byte std140 descriptor with one-way light anchor",
 } as const;
 
 type Mutation = readonly [string, keyof typeof floors, string, string, string];
@@ -75,6 +77,15 @@ const mutants: readonly Mutation[] = [
     "if (readLE(bytes, 508, 4) !== crc32(bytes, 0, 508)) return BAD_INPUT();", ""],
   ["round-half-up", "recipe", "ss/wallpaper/color.ss.ts",
     "fraction > .5 || (fraction === .5 && mod(lower, 2) !== 0)", "fraction >= .5"],
+  ["tier3-hysteresis-bypass", "tier3Ladder", "ss/wallpaper/tier3_world.ss.ts",
+    "power.nominalHeadroomMs >= TIER3_PROMOTE_HYSTERESIS_MS()", "power.nominalHeadroomMs >= 0"],
+  ["tier3-battery-demote-bypass", "tier3Ladder", "ss/wallpaper/tier3_world.ss.ts",
+    "(!power.onAcPower && power.batteryPct < 20)", "(!power.onAcPower && power.batteryPct < 5)"],
+  ["tier3-critical-demote-bypass", "tier3Ladder", "ss/wallpaper/tier3_world.ss.ts",
+    "if (thermal >= 3) {\n    if (cur > 0) demoted = true;\n    next = 0;",
+    "if (thermal >= 3) {\n    if (cur > 0) demoted = true;\n    next = 2;"],
+  ["tier3-scrim-cap-bypass", "tier3Uniforms", "ss/wallpaper/tier3_world.ss.ts",
+    "clampVal(input.hudScrimAlpha, 0, 0.45)", "clampVal(input.hudScrimAlpha, 0, 1.0)"],
 ];
 
 function runtimeFloor(cwd: string, name?: string) {

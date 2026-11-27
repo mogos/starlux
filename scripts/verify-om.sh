@@ -131,3 +131,35 @@ for model in .om/audio/twins/*.om; do
   fi
   printf 'OM audio twin %s exit=%s\n' "$(basename "$model")" "$status"
 done
+
+# 5. Wallpaper OM models (.om/wallpaper: wake, codec_light, memory) + 6 twins
+om check .om/wallpaper --json > "$proof/wallpaper-project.json"
+bun -e '
+  import assert from "node:assert/strict";
+  const project = await Bun.file(process.argv[1]).json();
+  assert.equal(project.operation_status, "PROJECT_CLOSED");
+  assert.equal(project.models.length, 3);
+  let totalClaims = 0;
+  let totalStates = 0;
+  for (const model of project.models) {
+    assert.equal(model.verdict, "CLOSED");
+    assert.equal(model.semantic_result.completeness.status, "CLOSED");
+    assert.deepEqual(model.vacuous_claims, []);
+    assert.ok(model.claims.every((claim) => claim.status === "HOLDS" && !claim.guard_echo));
+    totalClaims += model.claims.length;
+    totalStates += Number(model.distinct);
+  }
+  assert.equal(totalClaims, 6);
+  console.log(`OM wallpaper CLOSED | 3 models | ${totalStates} reachable states | ${totalClaims} claims | 0 VACUOUS | 0 INCOMPLETE`);
+' "$proof/wallpaper-project.json"
+
+for model in .om/wallpaper/twins/*.om; do
+  receipt="$proof/wallpaper-$(basename "$model" .om).json"
+  status=0
+  om check "$model" --stop-at-first --json > "$receipt" || status=$?
+  if [[ "$status" -ne 2 ]]; then
+    printf 'Expected exit 2 for %s, got %s\n' "$model" "$status" >&2
+    exit 1
+  fi
+  printf 'OM wallpaper twin %s exit=%s\n' "$(basename "$model")" "$status"
+done

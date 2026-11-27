@@ -119,6 +119,8 @@ test("four-target wallpaper parity vector reports the pinned digest and quality 
   scope.budget = () => {};
   try {
     const { main } = await import("./wallpaper-parity.ss.ts");
-    expect(main(1)).toEqual([3574483510, 99991, 237, 41785]);
+    const result = main(1);
+    expect(result.slice(0, 4)).toEqual([3574483510, 99991, 237, 41785]);
+    expect(result[4]).toBeGreaterThan(0);
   } finally { delete scope.budget; }
 });

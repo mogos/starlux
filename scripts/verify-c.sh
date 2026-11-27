@@ -66,3 +66,17 @@ for standard in c11 c17; do
     tests/audio-c-smoke.c "$work/audio/libstarlux_audio.a" -lm -o "$work/audio-smoke-$standard"
   "$work/audio-smoke-$standard"
 done
+
+# 4. Wallpaper 688-word caller-owned ABI C11/C17 + zero libm + zero heap allocators
+mkdir -p "$work/wallpaper"
+./c/wallpaper/build-wallpaper.sh "$work/wallpaper"
+if nm -u "$work/wallpaper/libstarlux_wallpaper.a" | rg -q ' (malloc|calloc|realloc|free|sin|cos|tan|atan|atan2|asin|acos|pow|exp|log|log2|log10|sqrt|floor|ceil|fmod|hypot|cbrt|sincos)(f|l)?$'; then
+  printf 'Wallpaper C library contains a forbidden libm or allocator reference\n' >&2
+  exit 1
+fi
+for standard in c11 c17; do
+  "${CC:-cc}" -std="$standard" -O2 -Wall -Wextra -Werror -pedantic -ffp-contract=off -fno-fast-math \
+    -I "$work/wallpaper" tests/wallpaper-c-smoke.c "$work/wallpaper/libstarlux_wallpaper.a" -o "$work/wallpaper-smoke-$standard"
+  "$work/wallpaper-smoke-$standard"
+done
+printf 'Wallpaper C11 and C17 callers compiled cleanly with zero libm or heap allocator symbols\n'

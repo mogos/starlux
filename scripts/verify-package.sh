@@ -37,10 +37,20 @@ import { MagneticTiling } from "@mogos/starlux/magnetic-tiling";
 import { mountMagneticTiling } from "@mogos/starlux/dom/magnetic";
 import { instantiateMagneticWasm, magneticWasm } from "@mogos/starlux/wasm/magnetic";
 import { catalogSize, getAudioCue, StarluxAudioHost } from "@mogos/starlux/audio";
+import {
+  TIER3_WORLD_UNIFORM_FLOATS,
+  WALLPAPER_TIER_G3,
+  WALLPAPER_TIER_L0,
+  WALLPAPER_TIER_M2,
+  WallpaperRuntime,
+  buildStarluxWorldUniforms,
+  packStarluxWorldUniforms,
+  selectWallpaperTier,
+} from "@mogos/starlux/wallpaper";
 import * as root from "@mogos/starlux";
 
 const pkg = JSON.parse(readFileSync("node_modules/@mogos/starlux/package.json", "utf8"));
-assert.deepEqual(Object.keys(pkg.exports), [".", "./light", "./lux", "./physics", "./sensory", "./living-state", "./voice", "./dom", "./c", "./magnetic-tiling", "./dom/magnetic", "./wasm/magnetic", "./audio"]);
+assert.deepEqual(Object.keys(pkg.exports), [".", "./light", "./lux", "./physics", "./sensory", "./living-state", "./voice", "./dom", "./c", "./magnetic-tiling", "./dom/magnetic", "./wasm/magnetic", "./audio", "./wallpaper"]);
 assert.equal(pkg.license, "MIT");
 assert.equal(pkg.type, "module");
 assert.equal(pkg.sideEffects, false);
@@ -82,5 +92,40 @@ const lightRes = lightWasmMod.starluxLightFrame(lightInput);
 assert.equal(lightRes.status, 0);
 assert.equal(lightRes.packet.length, 1352);
 
-console.log("Packed ESM and all 13 exports (physics, magnetic, light+WASM, voice, audio) load with zero runtime dependencies");
+const wpRuntime = new WallpaperRuntime({ presetId: 1, width: 1920, height: 1080 });
+wpRuntime.step(0, 0);
+const tierDrop = selectWallpaperTier(
+  WALLPAPER_TIER_G3(),
+  WALLPAPER_TIER_G3(),
+  2,
+  { webgpu: true, webgl2: true, webgl2Float: true, worldWebgl2Compat: true, reducedMotion: false },
+  { onAcPower: true, batteryPct: 100, overloadFrames: 0, nominalHeadroomMs: 0, m2BudgetBreached: false },
+);
+assert.equal(tierDrop.tier, WALLPAPER_TIER_M2());
+assert.equal(tierDrop.demoted, true);
+const tierCrit = selectWallpaperTier(
+  WALLPAPER_TIER_G3(),
+  WALLPAPER_TIER_G3(),
+  3,
+  { webgpu: true, webgl2: true, webgl2Float: true, worldWebgl2Compat: true, reducedMotion: false },
+  { onAcPower: true, batteryPct: 100, overloadFrames: 0, nominalHeadroomMs: 0, m2BudgetBreached: false },
+);
+assert.equal(tierCrit.tier, WALLPAPER_TIER_L0());
+const uniforms = buildStarluxWorldUniforms({
+  solarElevationRad: 0.42, solarAzimuthRad: 1.1,
+  precipitation: 0, cloudCoverage: 0.3, fogDensity: 0.1, windSpeedMps: 4,
+  windDirX: 1, windDirZ: 0, gustPhase: 0.5, seasonPhase: 0.25,
+  osStateId: 0, osStateIntensity: 0, pulsePhase: 0, voiceRms: 0, polarity: 0,
+  camX: 0, camY: 2, camZ: 6, fovRad: 0.9, targetX: 0, targetY: 1, targetZ: 0, parallaxStrength: 0.25,
+  pointerX: 0, pointerY: 0, simTimeSec: 0, frameIndex: 0,
+  activeTier: WALLPAPER_TIER_G3(), thermalTier: 0, lodLevel: 0, onBattery: false, is4k: false, exposureEv: 0,
+  lightAnchorX: 0, lightAnchorY: 1, lightAnchorZ: 0.5, lightKeyElevation: 0.7,
+  lightRimR: 0.9, lightRimG: 0.6, lightRimB: 0.3, hudScrimAlpha: 0.2,
+  width: 1920, height: 1080, settleBlend: 1, hudTopLumaTarget: 0.1, hudBottomLumaTarget: 0.1,
+});
+const packed = new Array(TIER3_WORLD_UNIFORM_FLOATS()).fill(0);
+assert.equal(packStarluxWorldUniforms(uniforms, packed), 0);
+assert.equal(packed[40], 0);
+
+console.log("Packed ESM and all 14 exports (physics, magnetic, light+WASM, voice, audio, wallpaper) load with zero runtime dependencies");
 JS
