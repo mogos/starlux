@@ -1,0 +1,64 @@
+om 0.1
+model starlux_audio
+
+var muted: bool = true
+var armed: bool = false
+var ctx: 0..2 = 0
+var token: bool = false
+var linger: bool = false
+var voices: 0..7 = 0
+var rendered: bool = false
+var level: 0..4 = 0
+var boundary: 0..2 = 0
+var reduced: bool = false
+var lastGain: 0..2 = 0
+var lastKinetic: bool = false
+
+action opt_in by user
+  when not armed
+  then armed := true, muted := false, ctx := 1
+action mute by user
+  when not muted
+  then muted := true, voices := 0, token := false, linger := true, rendered := false, boundary := 1
+action unmute by user
+  when muted and armed
+  then muted := false
+action toggle_reduced by user
+  when true
+  then reduced := not reduced, lastGain := 0, lastKinetic := false
+action post_info by interface
+  when armed and not muted and voices < 6
+  then voices := voices + 1, token := true, linger := false, ctx := 2, boundary := 1,
+       lastGain := (if reduced then 1 else 2), lastKinetic := false
+action post_kinetic by interface
+  when armed and not muted and not reduced and voices < 6
+  then voices := voices + 1, token := true, linger := false, ctx := 2, boundary := 1,
+       lastGain := 2, lastKinetic := true
+action post_steal by interface
+  when armed and not muted and voices == 6
+  then boundary := 2, lastGain := (if reduced then 1 else 2), lastKinetic := false
+action render by audio
+  when ctx == 2 and token
+  then rendered := true, level := (if voices >= 5 then 3 else (if voices >= 1 then 2 else 1))
+action voice_end by audio
+  when voices > 0
+  then voices := voices - 1, boundary := 1
+action release by audio
+  when token and voices == 0
+  then token := false, linger := true, rendered := false, level := 0
+action linger_expire by host
+  when linger and not token
+  then linger := false, ctx := 1
+
+claim audio_idle_suspends "A running context holds a token or an armed linger." rule R-A01
+  always (ctx == 2 implies (token or linger))
+claim peak_below_ceiling "The output level never leaves the ceiling bucket." rule R-A02
+  always (level <= 3)
+claim zero_click_discontinuity "Every voice boundary is a faded boundary." rule R-A03
+  always (boundary != 2)
+claim polyphony_bounded "At most six voices sound." rule R-A04
+  always (voices <= 6)
+claim mute_and_gesture_gated "Samples are rendered only when armed and unmuted." rule R-A05
+  always (rendered implies (armed and not muted))
+claim reduced_motion_attenuated "Under reduced motion no cue is full gain and none is kinetic." rule R-A06
+  always (reduced implies (lastGain != 2 and not lastKinetic))
