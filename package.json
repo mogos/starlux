@@ -18,7 +18,8 @@
     "./magnetic-tiling": { "types": "./dist/src/magnetic-tiling.d.ts", "default": "./dist/src/magnetic-tiling.js" },
     "./dom/magnetic": { "types": "./dist/src/dom/magnetic-controller.d.ts", "default": "./dist/src/dom/magnetic-controller.js" },
     "./wasm/magnetic": { "types": "./c/magnetic-wasm.d.ts", "default": "./c/magnetic-wasm.js" },
-    "./audio": { "types": "./dist/src/audio/index.d.ts", "default": "./dist/src/audio/index.js" }
+    "./audio": { "types": "./dist/src/audio/index.d.ts", "default": "./dist/src/audio/index.js" },
+    "./wallpaper": { "types": "./dist/src/wallpaper/index.d.ts", "default": "./dist/src/wallpaper/index.js" }
   },
   "imports": { "#starlux-magnetic-wasm": "./c/magnetic-wasm.js" },
   "files": ["dist", "ss", "c", "FLOORS.jsonl"],

@@ -1,0 +1,66 @@
+om 0.1
+model wallpaperwake
+
+var mode: 0..6 = 0
+var settled: bool = true
+var channel: bool = false
+var hidden: bool = false
+var paused: bool = false
+var reduced: bool = false
+var tokens: 0..1 = 0
+var staticPending: bool = false
+var tickedLive: bool = false
+var drewSinceHidden: bool = false
+var drawsSinceChange: 0..3 = 0
+
+action request_mode(m in 0..6) by host
+  when true
+  then mode := m, settled := false, tickedLive := false, staticPending := true, drawsSinceChange := 0,
+       tokens := (if hidden or paused or reduced then 0 else 1)
+action settle by kernel
+  when not settled and not channel and mode <= 2
+  then settled := true, tokens := 0, tickedLive := false
+action open_channel by sensor
+  when not channel and not hidden and not paused and not reduced
+  then channel := true, settled := false, tokens := 1
+action close_channel by sensor
+  when channel
+  then channel := false
+action live_frame by clock
+  when tokens > 0 and not hidden and not paused
+  then tickedLive := true, staticPending := false,
+       drewSinceHidden := (if hidden then true else drewSinceHidden),
+       drawsSinceChange := (if drawsSinceChange < 3 then drawsSinceChange + 1 else 3)
+action static_frame by host
+  when staticPending and not hidden and not paused
+  then staticPending := false,
+       drewSinceHidden := (if hidden then true else drewSinceHidden),
+       drawsSinceChange := (if drawsSinceChange < 3 then drawsSinceChange + 1 else 3)
+action stale_callback by clock
+  when tokens == 0
+  then tickedLive := false
+action hide by host
+  when not hidden
+  then hidden := true, tokens := 0, drewSinceHidden := false
+action show by host
+  when hidden
+  then hidden := false, staticPending := true, drawsSinceChange := 0
+action pause by host
+  when not paused
+  then paused := true, tokens := 0
+action resume by host
+  when paused
+  then paused := false, staticPending := true, drawsSinceChange := 0
+action reduce_on by host
+  when not reduced
+  then reduced := true, tokens := 0, channel := false, staticPending := true, drawsSinceChange := 0
+action reduce_off by host
+  when reduced
+  then reduced := false, drawsSinceChange := 0
+
+claim calm_zero_idle_ticks "A settled calm wallpaper with no channel holds no token and ticks no live frame." rule R-W01
+  always ((mode == 0 and settled and not channel) implies (tokens == 0 and not tickedLive))
+claim hidden_zero_draws "Nothing is drawn while the surface is hidden." rule R-W02
+  always (hidden implies not drewSinceHidden)
+claim reduced_motion_static_frame "Under reduced motion a change produces at most one draw." rule R-W03
+  always (reduced implies (drawsSinceChange <= 1 and tokens == 0))

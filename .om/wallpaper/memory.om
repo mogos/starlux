@@ -1,0 +1,22 @@
+om 0.1
+model wallpapermemory
+
+var assetUnits: 0..12 = 0
+var capUnits: 1..12 = 6
+var encodedUnits: 0..7 = 0
+
+action admit_asset(s in 1..4) by loader
+  when assetUnits + s <= capUnits
+  then assetUnits := assetUnits + s
+action admit_encoded(s in 1..3) by loader
+  when encodedUnits + s <= 6
+  then encodedUnits := encodedUnits + s
+action evict_assets by loader
+  when assetUnits > 0 or encodedUnits > 0
+  then assetUnits := 0, encodedUnits := 0
+action set_cap(c in 1..12) by host
+  when assetUnits <= c
+  then capUnits := c
+
+claim memory_and_asset_caps "Admitted decoded and encoded assets never exceed their respective ceilings." rule R-W06
+  always (assetUnits <= capUnits and encodedUnits <= 6)

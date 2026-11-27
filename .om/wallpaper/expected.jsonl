@@ -1,0 +1,3 @@
+{"model":"wallpaperwake","verdict":"CLOSED","failing_claims":[],"distinct":810,"distinct_tolerance_pct":0,"bound":"saturated@8","status":{"calm_zero_idle_ticks":"must-hold","hidden_zero_draws":"must-hold","reduced_motion_static_frame":"must-hold"}}
+{"model":"wallpapercodeclight","verdict":"CLOSED","failing_claims":[],"distinct":16,"distinct_tolerance_pct":0,"bound":"saturated@5","status":{"codec_roundtrip_exact":"must-hold","light_binding_acyclic":"must-hold"}}
+{"model":"wallpapermemory","verdict":"CLOSED","failing_claims":[],"distinct":630,"distinct_tolerance_pct":0,"bound":"saturated@6","status":{"memory_and_asset_caps":"must-hold"}}

@@ -1,0 +1,33 @@
+om 0.1
+model wallpapercodeclight
+
+var lossless: bool = true
+var decoded: bool = false
+var decodedEqual: bool = true
+var exported: bool = false
+var exportReadsLight: bool = false
+var lightShaded: bool = false
+
+action encode_lossless by baker
+  when not decoded
+  then lossless := true, decoded := true, decodedEqual := false
+action encode_lossy by baker
+  when not decoded
+  then lossless := false, decoded := true, decodedEqual := false
+action rebake by baker
+  when decoded
+  then decoded := false
+action export_zenith by kernel
+  when true
+  then exported := true, exportReadsLight := false
+action light_shade by light
+  when exported
+  then lightShaded := true
+action next_transaction by host
+  when exported
+  then exported := false
+
+claim codec_roundtrip_exact "A lossless tier decodes to exactly the encoded pixels." rule R-W04
+  always ((decoded and lossless) implies decodedEqual)
+claim light_binding_acyclic "The zenith export never reads a light output." rule R-W05
+  always (exported implies not exportReadsLight)
