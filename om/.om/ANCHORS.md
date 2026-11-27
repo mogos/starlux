@@ -40,10 +40,43 @@
 | starlux.stale_epoch_rejected | `ss/lux/wake.ss.ts:103-108` | |
 | starlux.ticked | `ss/lux/wake.ss.ts:103-108` | |
 | starlux.tokensAtTick | `ss/lux/wake.ss.ts:103-108` | |
+| magnetic.absorb | `ss/magnetic_tiling.ss.ts:155-181` | |
+| magnetic.arrive | `ss/magnetic_tiling.ss.ts:155-181` | |
+| magnetic.content | `ss/magnetic_tiling.ss.ts:236-241` | |
+| magnetic.crossing | `ss/magnetic_tiling.ss.ts:155-181` | |
+| magnetic.dispatch_idle | `src/dom/magnetic-controller.ts:321-339` | |
+| magnetic.dispatch_live | `src/magnetic-tiling.ts:412-423` | |
+| magnetic.dispatched | `src/magnetic-tiling.ts:412-423` | |
+| magnetic.dock_absorbs_crossing | `ss/magnetic_tiling.ss.ts:155-181` | |
+| magnetic.empty | `ss/magnetic_tiling.ss.ts:236-241` | |
+| magnetic.fade | `ss/magnetic_tiling.ss.ts:236-241` | |
+| magnetic.finish_open | `ss/magnetic_tiling.ss.ts:250-256` | |
+| magnetic.glass | `ss/magnetic_tiling.ss.ts:236-241` | |
+| magnetic.hidden | `ss/magnetic_tiling.ss.ts:201-213` | |
+| magnetic.hide | `ss/magnetic_tiling.ss.ts:201-213` | |
+| magnetic.lease | `src/magnetic-tiling.ts:524-537` | |
+| magnetic.leaseAtDispatch | `src/magnetic-tiling.ts:412-423` | |
+| magnetic.magnetic_idle_clock | `src/magnetic-tiling.ts:412-423` | |
+| magnetic.magnetic_rest_releases | `src/magnetic-tiling.ts:524-537` | |
+| magnetic.minimize | `src/magnetic-tiling.ts:482-499` | |
+| magnetic.minimized_is_hidden | `src/dom/magnetic-controller.ts:155-172` | |
+| magnetic.neighbor | `ss/magnetic_tiling.ss.ts:18-28` | |
+| magnetic.neighbor_monotone | `ss/magnetic_tiling.ss.ts:18-28` | |
+| magnetic.open_is_opaque | `ss/magnetic_tiling.ss.ts:250-256` | |
+| magnetic.phase | `ss/magnetic_tiling.ss.ts:236-241` | |
+| magnetic.pushed | `src/magnetic-tiling.ts:655-679` | |
+| magnetic.r29_empty_glass | `ss/magnetic_tiling.ss.ts:236-241` | |
+| magnetic.reopen_content | `ss/magnetic_tiling.ss.ts:236-241` | |
+| magnetic.reopen_glass | `ss/magnetic_tiling.ss.ts:236-241` | |
+| magnetic.request_push | `src/magnetic-tiling.ts:655-679` | |
+| magnetic.restore | `src/magnetic-tiling.ts:482-499` | |
+| magnetic.settle_neighbor | `ss/magnetic_tiling.ss.ts:18-28` | |
+| magnetic.step_neighbor | `ss/magnetic_tiling.ss.ts:29-42` | |
+| magnetic.targetDock | `ss/magnetic_tiling.ss.ts:86-89` | |
 
 ## Structured source anchors (OM-ANCHORS/1)
 
-code_sha: 7397ea68b3881d8fa4391aaadcb8055bd0b3a5e9
+code_sha: c0ec05f2ff14a0cab51a8ec7771d4b408089a710
 
 | Model element | File | Start line | End line | SHA-256 |
 | --- | --- | ---: | ---: | --- |
@@ -85,3 +118,36 @@ code_sha: 7397ea68b3881d8fa4391aaadcb8055bd0b3a5e9
 | starlux.stale_epoch_rejected | ss/lux/wake.ss.ts | 103 | 108 | 8dd34dc2cf28c990a71aff6518d9e949eae14adfd3e899cc21ec01d1ae100774 |
 | starlux.ticked | ss/lux/wake.ss.ts | 103 | 108 | 8dd34dc2cf28c990a71aff6518d9e949eae14adfd3e899cc21ec01d1ae100774 |
 | starlux.tokensAtTick | ss/lux/wake.ss.ts | 103 | 108 | 8dd34dc2cf28c990a71aff6518d9e949eae14adfd3e899cc21ec01d1ae100774 |
+| magnetic.absorb | ss/magnetic_tiling.ss.ts | 155 | 181 | b0cfd0e3036cd0d3dbe0eca789d6a1ca8d9454700e729aa9e54247d2a78c0a3f |
+| magnetic.arrive | ss/magnetic_tiling.ss.ts | 155 | 181 | b0cfd0e3036cd0d3dbe0eca789d6a1ca8d9454700e729aa9e54247d2a78c0a3f |
+| magnetic.content | ss/magnetic_tiling.ss.ts | 236 | 241 | f3f7f737f7639bb59c302c96e54735310194298739d4fdc99d40883e5daa97fa |
+| magnetic.crossing | ss/magnetic_tiling.ss.ts | 155 | 181 | b0cfd0e3036cd0d3dbe0eca789d6a1ca8d9454700e729aa9e54247d2a78c0a3f |
+| magnetic.dispatch_idle | src/dom/magnetic-controller.ts | 321 | 339 | 40342d0fb6e99fde6f2531e618121f46da0ef05b20f54285472f9a52bc2a4860 |
+| magnetic.dispatch_live | src/magnetic-tiling.ts | 412 | 423 | b0ad54432119b9c3fbc5fc89def4a4afae2d787f080e3daf02396c14e9e8fa1d |
+| magnetic.dispatched | src/magnetic-tiling.ts | 412 | 423 | b0ad54432119b9c3fbc5fc89def4a4afae2d787f080e3daf02396c14e9e8fa1d |
+| magnetic.dock_absorbs_crossing | ss/magnetic_tiling.ss.ts | 155 | 181 | b0cfd0e3036cd0d3dbe0eca789d6a1ca8d9454700e729aa9e54247d2a78c0a3f |
+| magnetic.empty | ss/magnetic_tiling.ss.ts | 236 | 241 | f3f7f737f7639bb59c302c96e54735310194298739d4fdc99d40883e5daa97fa |
+| magnetic.fade | ss/magnetic_tiling.ss.ts | 236 | 241 | f3f7f737f7639bb59c302c96e54735310194298739d4fdc99d40883e5daa97fa |
+| magnetic.finish_open | ss/magnetic_tiling.ss.ts | 250 | 256 | 2834d837a390887db0ca07802d3028f16809910eca1a0b8cef3efa7ef03aed95 |
+| magnetic.glass | ss/magnetic_tiling.ss.ts | 236 | 241 | f3f7f737f7639bb59c302c96e54735310194298739d4fdc99d40883e5daa97fa |
+| magnetic.hidden | ss/magnetic_tiling.ss.ts | 201 | 213 | f9bb9a597fdb35459872b1029b62fdbf00987370a644bd4d0220717f0e02b448 |
+| magnetic.hide | ss/magnetic_tiling.ss.ts | 201 | 213 | f9bb9a597fdb35459872b1029b62fdbf00987370a644bd4d0220717f0e02b448 |
+| magnetic.lease | src/magnetic-tiling.ts | 524 | 537 | 50469c5c0de33d1ee6bce14cbdf474bb25c52e81d79dfce6c6e0b17b578d8950 |
+| magnetic.leaseAtDispatch | src/magnetic-tiling.ts | 412 | 423 | b0ad54432119b9c3fbc5fc89def4a4afae2d787f080e3daf02396c14e9e8fa1d |
+| magnetic.magnetic_idle_clock | src/magnetic-tiling.ts | 412 | 423 | b0ad54432119b9c3fbc5fc89def4a4afae2d787f080e3daf02396c14e9e8fa1d |
+| magnetic.magnetic_rest_releases | src/magnetic-tiling.ts | 524 | 537 | 50469c5c0de33d1ee6bce14cbdf474bb25c52e81d79dfce6c6e0b17b578d8950 |
+| magnetic.minimize | src/magnetic-tiling.ts | 482 | 499 | 8680bd1c56b5c078117b874142a5ca176a949f2ce6e170146d79343742a37463 |
+| magnetic.minimized_is_hidden | src/dom/magnetic-controller.ts | 155 | 172 | 650784673cb459b7b9e2acdfe64633672d879cf6c1f5be2031a76a5330f6fc32 |
+| magnetic.neighbor | ss/magnetic_tiling.ss.ts | 18 | 28 | de5fb2d2d3098a2ef59a7e225599423e6687a57138c29b30a67ab10eb883a7ad |
+| magnetic.neighbor_monotone | ss/magnetic_tiling.ss.ts | 18 | 28 | de5fb2d2d3098a2ef59a7e225599423e6687a57138c29b30a67ab10eb883a7ad |
+| magnetic.open_is_opaque | ss/magnetic_tiling.ss.ts | 250 | 256 | 2834d837a390887db0ca07802d3028f16809910eca1a0b8cef3efa7ef03aed95 |
+| magnetic.phase | ss/magnetic_tiling.ss.ts | 236 | 241 | f3f7f737f7639bb59c302c96e54735310194298739d4fdc99d40883e5daa97fa |
+| magnetic.pushed | src/magnetic-tiling.ts | 655 | 679 | 448f18f23645963ef27575edd0894c4e571f55a0f5361928dacae5038b6db979 |
+| magnetic.r29_empty_glass | ss/magnetic_tiling.ss.ts | 236 | 241 | f3f7f737f7639bb59c302c96e54735310194298739d4fdc99d40883e5daa97fa |
+| magnetic.reopen_content | ss/magnetic_tiling.ss.ts | 236 | 241 | f3f7f737f7639bb59c302c96e54735310194298739d4fdc99d40883e5daa97fa |
+| magnetic.reopen_glass | ss/magnetic_tiling.ss.ts | 236 | 241 | f3f7f737f7639bb59c302c96e54735310194298739d4fdc99d40883e5daa97fa |
+| magnetic.request_push | src/magnetic-tiling.ts | 655 | 679 | 448f18f23645963ef27575edd0894c4e571f55a0f5361928dacae5038b6db979 |
+| magnetic.restore | src/magnetic-tiling.ts | 482 | 499 | 8680bd1c56b5c078117b874142a5ca176a949f2ce6e170146d79343742a37463 |
+| magnetic.settle_neighbor | ss/magnetic_tiling.ss.ts | 18 | 28 | de5fb2d2d3098a2ef59a7e225599423e6687a57138c29b30a67ab10eb883a7ad |
+| magnetic.step_neighbor | ss/magnetic_tiling.ss.ts | 29 | 42 | 813cd1f41d74576216ee0738c4698052d0c5b234ad406df496358ad98e3cfdff |
+| magnetic.targetDock | ss/magnetic_tiling.ss.ts | 86 | 89 | b89482354e9d52a8d10483d1fe1f4f4ac108c8307de7e185817711b7730f1ca0 |

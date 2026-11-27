@@ -1,0 +1,74 @@
+om 0.1
+model magnetic
+
+var phase: 0..4 = 0
+var targetDock: bool = false
+var glass: 0..2 = 2
+var content: 0..2 = 2
+var hidden: bool = false
+var crossing: bool = false
+var absorb: bool = false
+var neighbor: 0..3 = 0
+var pushed: bool = false
+var lease: bool = false
+var dispatched: bool = false
+var leaseAtDispatch: bool = false
+
+action minimize by host
+  when not targetDock and not hidden
+  then targetDock := true, hidden := (phase == 4), lease := (phase != 4 or pushed)
+action restore by host
+  when targetDock
+  then targetDock := false, hidden := false, lease := true
+action fade by compositor
+  when targetDock and phase == 0
+  then phase := 1, glass := 2, content := 1, crossing := false, absorb := false
+action empty by compositor
+  when targetDock and phase == 1
+  then phase := 2, glass := 2, content := 0, crossing := false, absorb := false
+action arrive by compositor
+  when targetDock and phase == 2
+  then phase := 3, glass := 1, content := 0, crossing := true, absorb := true
+action hide by compositor
+  when targetDock and phase == 3
+  then phase := 4, glass := 0, content := 0, hidden := true, crossing := false, absorb := false,
+       lease := pushed
+action reopen_glass by compositor
+  when not targetDock and phase >= 3
+  then phase := 2, glass := 2, content := 0, crossing := false, absorb := false
+action reopen_content by compositor
+  when not targetDock and phase == 2
+  then phase := 1, glass := 2, content := 1, crossing := false, absorb := false
+action finish_open by compositor
+  when not targetDock and phase <= 1 and lease
+  then phase := 0, glass := 2, content := 2, crossing := false, absorb := false, lease := pushed
+action request_push by host
+  when not pushed
+  then neighbor := 0, pushed := true, lease := true
+action step_neighbor by compositor
+  when pushed and neighbor == 0
+  then neighbor := 1
+action settle_neighbor by compositor
+  when pushed and neighbor == 1
+  then neighbor := 2, pushed := false, lease := (if targetDock then phase != 4 else phase != 0)
+action dispatch_live by clock
+  when lease
+  then dispatched := true, leaseAtDispatch := true
+action dispatch_idle by clock
+  when not lease
+  then dispatched := false, leaseAtDispatch := false
+
+claim r29_empty_glass "The pane is empty, visible and fully glass at the R29 midpoint." rule R-006
+  always (phase == 2 implies (glass == 2 and content == 0 and not hidden))
+claim neighbor_monotone "The neighbor stays between its source and destination." rule R-007
+  always (neighbor <= 2)
+claim magnetic_idle_clock "Each dispatched frame had a frame lease." rule R-008
+  always (dispatched implies leaseAtDispatch)
+claim dock_absorbs_crossing "Arrival crossing and dock absorption agree." rule R-009
+  always (crossing == absorb)
+claim open_is_opaque "A settled open pane is fully opaque and accessible." rule R-010
+  always ((not targetDock and phase == 0 and not lease) implies (glass == 2 and content == 2 and not hidden))
+claim minimized_is_hidden "A settled docked pane is invisible and inert until restore begins." rule R-011
+  always ((targetDock and phase == 4) implies (glass == 0 and hidden))
+claim magnetic_rest_releases "Completed dock flight with neighbors at rest holds no frame lease." rule R-012
+  always ((targetDock and phase == 4 and not pushed) implies not lease)
