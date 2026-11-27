@@ -1,0 +1,69 @@
+om 0.1
+model starlux
+
+var plain: bool = false
+var body: bool = false
+var gesture: bool = false
+var rest: 0..8 = 0
+var hold: 1..8 = 3
+var cancelled: bool = false
+var callbackFresh: bool = true
+var ticked: bool = false
+var tokensAtTick: 0..3 = 0
+var stale: bool = false
+var pendingPush: bool = false
+var pushCompleted: bool = false
+
+action acquire_plain by host
+  when not plain
+  then plain := true, callbackFresh := (if not body and not gesture then false else callbackFresh)
+action release_plain by host
+  when plain
+  then plain := false, callbackFresh := (if not body and not gesture then false else callbackFresh)
+action acquire_body(h in 1..8) by body
+  when not body
+  then body := true, rest := 0, hold := h, callbackFresh := (if not plain and not gesture then false else callbackFresh)
+action resting_frame by body
+  when body and rest + 1 < hold
+  then rest := rest + 1
+action moving_frame by body
+  when body
+  then rest := 0
+action rest_release by body
+  when body and rest + 1 == hold
+  then rest := hold, body := true, callbackFresh := (if not plain and not gesture then false else callbackFresh)
+action acquire_gesture by host
+  when not gesture
+  then gesture := true, cancelled := false, callbackFresh := (if not plain and not body then false else callbackFresh)
+action cancel_gesture by host
+  when gesture
+  then gesture := false, cancelled := true, callbackFresh := (if not plain and not body then false else callbackFresh)
+action capture_epoch by source
+  when true
+  then callbackFresh := true
+action deliver_frame by source
+  when callbackFresh and (plain or body or gesture)
+  then ticked := true, tokensAtTick := (if plain then 1 else 0) + (if body then 1 else 0) + (if gesture then 1 else 0), stale := false
+action deliver_idle by source
+  when callbackFresh and not plain and not body and not gesture
+  then ticked := false, tokensAtTick := 0, stale := false
+action deliver_stale by source
+  when not callbackFresh
+  then ticked := false, tokensAtTick := 0, stale := true
+action request_push by active
+  when not pendingPush
+  then pendingPush := true, pushCompleted := false
+action receive_push by passive
+  when pendingPush
+  then pendingPush := false, pushCompleted := true
+
+claim no_tick_without_token "A dispatched frame has a live wake token at dispatch." rule R-001
+  always (ticked implies tokensAtTick > 0)
+claim body_rest_releases "The Nth consecutive rest sample releases the body lease." rule R-002
+  always (rest == hold implies not body)
+claim cancelled_gesture_releases "Cancellation synchronously releases the gesture lease." rule R-003
+  always (cancelled implies not gesture)
+claim stale_epoch_rejected "A callback from a stale epoch dispatches no frame." rule R-004
+  always (stale implies not ticked)
+claim coupled_neighbors_terminate "Receiving a push leaves no downstream push to dispatch." rule R-005
+  always (pushCompleted implies not pendingPush)

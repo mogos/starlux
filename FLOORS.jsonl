@@ -1,0 +1,11 @@
+{"id":"PORTABLE-001","measure":"identical_required_targets","min":4,"check":"starc test --all-targets --require-all --targets ts,rust,wasm,c"}
+{"id":"PORTABLE-002","measure":"observed_nonlinear_steps","min":500,"check":"tests/trajectory.ss.ts"}
+{"id":"KNOBS-001","measure":"killed_single_knob_mutants","min":44,"check":"bun tests/mutations.ts"}
+{"id":"FLAGS-001","measure":"disabled_flags_with_zero_instrumented_work","min":10,"check":"bun tests/mutations.ts"}
+{"id":"IDLE-001","measure":"observation_microseconds","min":10000000,"check":"bun test tests/runtime.test.ts"}
+{"id":"IDLE-002","measure":"clock_ticks_host_raf_callbacks_and_held_tokens_after_settle","max":0,"check":"bun test tests/runtime.test.ts"}
+{"id":"IDLE-003","measure":"remaining_listeners_and_raf_handles_after_unmount","max":0,"check":"bun test tests/runtime.test.ts"}
+{"id":"OM-001","measure":"closed_nonvacuous_claims","min":5,"check":"scripts/verify-om.sh"}
+{"id":"OM-002","measure":"refuted_twins_replayed_against_runtime","min":5,"check":"scripts/verify-om.sh"}
+{"id":"C11-001","measure":"strictly_compiled_and_tested_c_ffi_exports","min":3,"check":"scripts/verify-c.sh"}
+{"id":"PKG-001","measure":"runtime_dependencies","max":0,"check":"scripts/verify-package.sh"}
