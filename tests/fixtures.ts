@@ -82,3 +82,46 @@ export function fakeDom() {
     },
   };
 }
+
+class FakeStyle {
+  readonly values = new Map<string, string>();
+  setProperty(key: string, value: string): void { this.values.set(key, value); }
+  getPropertyValue(key: string): string { return this.values.get(key) ?? ""; }
+  getPropertyPriority(): string { return ""; }
+  removeProperty(key: string): void { this.values.delete(key); }
+}
+
+class FakeMagneticPane extends FakePane {
+  readonly style = new FakeStyle();
+  readonly attrs = new Map<string, string>();
+  readonly nodes = new Set<FakeMagneticPane>();
+  readonly clientWidth = 1200;
+  readonly clientHeight = 900;
+  parent: FakeMagneticPane | undefined;
+  constructor(readonly rect: { left: number; top: number; width: number; height: number },
+    readonly ownerDocument: { createElement: () => FakeMagneticPane }) { super(); }
+  getBoundingClientRect() { return this.rect; }
+  setAttribute(key: string, value: string): void { this.attrs.set(key, value); }
+  getAttribute(key: string): string | null { return this.attrs.get(key) ?? null; }
+  removeAttribute(key: string): void { this.attrs.delete(key); }
+  querySelector(): null { return null; }
+  append(node: FakeMagneticPane): void { node.parent = this; this.nodes.add(node); }
+  remove(): void { this.parent?.nodes.delete(this); }
+}
+
+export function fakeMagneticDom() {
+  const fake = fakeDom();
+  const document = { createElement: () => new FakeMagneticPane({ left: 0, top: 0, width: 1, height: 1 }, document) };
+  const element = (left: number, top: number, width: number, height: number) =>
+    new FakeMagneticPane({ left, top, width, height }, document);
+  const root = element(0, 0, 1200, 900);
+  const pane = element(40, 70, 500, 380);
+  const content = element(40, 70, 500, 380);
+  const glass = element(40, 70, 500, 380);
+  const dock = element(480, 840, 44, 44);
+  const ghost = element(0, 0, 1, 1);
+  const onion = element(0, 0, 1200, 900);
+  const windows = [{ id: "a", pane, content, glass, dock }] as unknown as import("../src/dom/magnetic-controller.ts").MagneticDomWindow[];
+  return { ...fake, root: root as unknown as HTMLElement, windows, pane, content, glass,
+    ghost: ghost as unknown as HTMLElement, onion: onion as unknown as HTMLElement, onionNodes: onion.nodes };
+}

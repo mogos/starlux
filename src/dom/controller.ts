@@ -59,7 +59,7 @@ const freeSpace: NonNullable<DomModule["physics"]> = {
   bounds: { enabled: false, minX: 0, maxX: 0, minY: 0, maxY: 0 },
 };
 
-function browserHost(element: HTMLElement): DomHost {
+export function browserHost(element: HTMLElement): DomHost {
   const view = element.ownerDocument.defaultView;
   if (view === null) throw new Error("Starlux requires a window or an injected host");
   return {

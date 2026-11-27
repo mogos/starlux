@@ -46,3 +46,58 @@ The math kernel uses ordinary binary64 operations, square root, floor and absolu
 ## Verification
 
 Run `./gate.sh` with Starscript, OM, Bun, Node/npm, TypeScript, a Rust toolchain including `wasm32-unknown-unknown`, and a C11 compiler. On `omo-nl-5` the gate uses a 6 GiB systemd user scope with no swap. The [floors](FLOORS.jsonl) cover four-target trajectory parity, single-knob mutants, the feature work guards, idle and teardown falsifiers, OM claims and C11. Read the [OM rules](om/.om/RULESET.md) for the modeled scope and runtime replay.
+
+## Magnetic tiling
+
+`@mogos/starlux` exports the portable window solver, layout planners, `MagneticTiling`
+and `mountMagneticTiling`. Use the engine directly when your compositor owns drawing
+and input. Use the DOM adapter when Starlux should apply the poses and own the frame
+source.
+
+```ts
+import { mountMagneticTiling } from "@mogos/starlux";
+
+const { engine, runMs, metrics, unmount } = mountMagneticTiling(workspace);
+engine.setLayout("bento");
+engine.gatherAll();
+runMs(1200);
+engine.returnAll();
+```
+
+Set `position: relative` on the workspace. Give each pane a unique
+`data-magnetic-window` value, and give its dock button the matching
+`data-magnetic-dock` value. Mark descendants with `data-magnetic-handle`,
+`data-magnetic-glass` and `data-magnetic-content`. Give glass and content separate
+layers so the content can dissolve while the glass keeps its backdrop filter.
+Optional `data-magnetic-shadow`, `data-magnetic-frost` and `data-magnetic-sheen`
+layers receive independent opacity. Use `--magnetic-sheen-angle` in the sheen's
+gradient. Optional `data-magnetic-minimize` and `data-magnetic-zoom` buttons wire
+the window actions. The adapter also accepts explicit elements for every part.
+
+A `data-magnetic-orb` button toggles gather and return. Optional
+`data-magnetic-ghost`, `data-magnetic-neighbors` and `data-magnetic-onion` layers
+render the snap preview and motion traces. Position overlay layers over the
+workspace and give them `pointer-events: none`. The `fields` option binds edge
+glow elements. Call `setOnion(true)` to show the traces.
+
+The six presets are `focus`, `split`, `thirds`, `bento`, `cascade` and
+`gather`. `free`, `master`, `cols3` and `grid` retain the study's free
+drag and its original layouts. In free layout, `edgeMode: "thirds"` adds thirds
+along the top and bottom edges, `"primary"` selects a two-thirds primary pane
+along either side, and `"focus"` enables the centered focus target along the top.
+`snap(id, zone)` can select any zone directly. Pass separate monitor viewports
+and workspaces to reserve dock space and enable edge handoff. All rectangles
+share the workspace's CSS pixel coordinate system.
+
+`MagneticTiling` exposes absolute spring poses, target geometry, previews,
+lifecycle events and sensory envelopes. `runMs(ms)` advances deterministic time
+without asking the browser for a frame. `auditSettledInvariants(win)` checks
+hidden docked panes, opaque open panes, settled layout and snap anomalies.
+The adapter follows the OS reduced-motion setting by default, supports a thermal
+tier override and releases its wake token when all springs finish.
+
+Native compositors can build the C17 archive with `./c/build.sh <out>` and
+include its C11/C17 header. The packed package also ships the generated WASM
+module and loader at `@mogos/starlux/wasm/magnetic`. Both expose the same flat
+window state and pose protocol used by `magneticFrameFlat` in TypeScript.
+See [the native ABI](c/README.md#magnetic-compositor-abi-v1) for the protocol.

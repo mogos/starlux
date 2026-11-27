@@ -23,9 +23,11 @@ if rg -n "['\"](@mogos/(starstyle|starkit|starshine)(/[^'\"]*)?|solid-js(/[^'\"]
   exit 1
 fi
 
-bun test tests/runtime.test.ts
+bun test tests/runtime.test.ts tests/magnetic.test.ts
 bun tests/mutations.ts
+bun tests/magnetic-mutations.ts
 starc test --all-targets --require-all --targets ts,rust,wasm,c tests/trajectory.ss.ts --input 4000
+starc test --all-targets --require-all --targets ts,rust,wasm,c tests/magnetic-trajectory.ss.ts --input 8333
 core_output="$(starc test --all-targets --require-all --targets ts,rust,wasm,c tests/core-portable.ss.ts --input 4000 --print-output)"
 printf '%s\n' "$core_output"
 if ! rg -q '^[1-9][0-9]*(\.[0-9]+)?$' <<< "$core_output"; then

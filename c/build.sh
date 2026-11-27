@@ -34,13 +34,15 @@ STARLUX_STEP_SPRING starluxStepSpring
 STARLUX_STEP_PHYSICS starluxStepPhysics
 MAP
 
-cc_flags=(-std=c11 -Wall -Wextra -Werror -ffp-contract=off)
+cc_flags=(-std=c17 -Wall -Wextra -Werror -ffp-contract=off)
 if "${CC:-cc}" -fno-diagnostics-show-caret -fsyntax-only -x c /dev/null >/dev/null 2>&1; then
   cc_flags+=(-fno-diagnostics-show-caret)
 fi
 "${CC:-cc}" "${cc_flags[@]}" \
   -I "$work" -I "$work/generated" -c "$root/c/starlux.c" -o "$work/starlux.o"
-"${AR:-ar}" rcs "$work/libstarlux.a" "$work/starlux.o"
+starc build --target c --lib "$root/c/magnetic.ss.ts" --out "$work/magnetic"
+"${CC:-cc}" "${cc_flags[@]}" -I "$work/magnetic" -c "$root/c/magnetic.c" -o "$work/magnetic.o"
+"${AR:-ar}" rcs "$work/libstarlux.a" "$work/starlux.o" "$work/magnetic.o"
 cp "$work/libstarlux.a" "$root/c/starlux.h" "$out"
 mkdir -p "$out/notices"
 cp "$work/generated/NOTICE" "$work/generated/LICENSE-MIT" "$work/generated/LICENSE-APACHE" "$out/notices"

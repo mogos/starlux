@@ -12,12 +12,17 @@
     "./sensory": { "types": "./dist/ss/sensory.ss.d.ts", "default": "./dist/ss/sensory.ss.js" },
     "./living-state": { "types": "./dist/ss/living-state.ss.d.ts", "default": "./dist/ss/living-state.ss.js" },
     "./dom": { "types": "./dist/src/dom/controller.d.ts", "default": "./dist/src/dom/controller.js" },
-    "./c": { "types": "./c/index.d.ts", "default": "./c/index.js" }
+    "./c": { "types": "./c/index.d.ts", "default": "./c/index.js" },
+    "./magnetic-tiling": { "types": "./dist/src/magnetic-tiling.d.ts", "default": "./dist/src/magnetic-tiling.js" },
+    "./dom/magnetic": { "types": "./dist/src/dom/magnetic-controller.d.ts", "default": "./dist/src/dom/magnetic-controller.js" },
+    "./wasm/magnetic": { "types": "./c/magnetic-wasm.d.ts", "default": "./c/magnetic-wasm.js" }
   },
+  "imports": { "#starlux-magnetic-wasm": "./c/magnetic-wasm.js" },
   "files": ["dist", "ss", "c", "FLOORS.jsonl"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "prepack": "npm run build",
+    "build:wasm": "./c/build-wasm.sh dist/wasm/magnetic",
+    "prepack": "npm run build && npm run build:wasm",
     "test": "./gate.sh"
   }
 }

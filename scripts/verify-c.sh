@@ -28,5 +28,12 @@ bun -e '
   assert.equal(invoke(), JSON.stringify(knobs) + "\n");
   assert.equal(invoke("spring", JSON.stringify([axis, 1, 4000, knobs, 1])), JSON.stringify(stepSpring(axis, 1, 4000, knobs, 1)) + "\n");
   assert.equal(invoke("physics", JSON.stringify([state, input, 4000, knobs])), JSON.stringify(stepPhysics(state, input, 4000, knobs)) + "\n");
-  console.log("C11 archive and all 3 C FFI exports passed with strict warnings");
+  console.log("C11 caller and all 3 existing C FFI exports passed with strict warnings");
 ' "$work/starlux-smoke"
+
+for standard in c11 c17; do
+  "${CC:-cc}" -std="$standard" -Wall -Wextra -Werror -pedantic -ffp-contract=off -I "$work"     tests/magnetic-abi.c "$work/libstarlux.a" -lm -o "$work/magnetic-$standard"
+done
+npm run build:wasm
+bun tests/magnetic-abi.ts "$work/magnetic-c11"
+bun tests/magnetic-abi.ts "$work/magnetic-c17"
