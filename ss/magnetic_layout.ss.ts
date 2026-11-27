@@ -158,14 +158,45 @@ export function magneticStrip(s: MagneticRect, index: number, count: number, hor
   return cell(s, 0, at, s.w, size);
 }
 
+function studyCell(s: MagneticRect, x: number, y: number, w: number, h: number, gap: number): MagneticRect {
+  const left = Math.floor(s.x + x + 0.5);
+  const top = Math.floor(s.y + y + 0.5);
+  const right = Math.floor(s.x + x + w - gap + 0.5);
+  const bottom = Math.floor(s.y + y + h - gap + 0.5);
+  return { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) };
+}
+
+function magneticStudySlot(s: MagneticRect, preset: number, index: number, count: number): MagneticRect {
+  const gap = Math.min(magneticGap(), Math.min(s.w, s.h) / 12);
+  const w = s.w + gap, h = s.h + gap;
+  if (preset === 6) {
+    const primary = w * 0.6, rail = h / (count - 1);
+    if (index === 0) return studyCell(s, 0, 0, primary, h, gap);
+    return studyCell(s, primary, (index - 1) * rail, w - primary, rail, gap);
+  }
+  if (preset === 7) {
+    const wing = w * (count === 2 ? 0.38 : 0.25);
+    const primary = count === 2 ? w - wing : w * 0.5;
+    if (index === 0) return studyCell(s, wing, 0, primary, h, gap);
+    if (index === 1) return studyCell(s, 0, 0, wing, h, gap);
+    const rail = h / (count - 2);
+    return studyCell(s, wing + primary, (index - 2) * rail, w - wing - primary, rail, gap);
+  }
+  if (count === 2) return studyCell(s, index * w / 2, 0, w / 2, h, gap);
+  if (count === 3 && index === 2) return studyCell(s, 0, h / 2, w, h / 2, gap);
+  const tile = index % 4;
+  const r = studyCell(s, (tile % 2) * w / 2, Math.floor(tile / 2) * h / 2, w / 2, h / 2, gap);
+  return magneticStrip(r, Math.floor(index / 4), Math.floor(count / 4) + (tile < count % 4 ? 1 : 0), s.w > s.h);
+}
+
 // Presets 1..5 are focus, split, thirds, bento and cascade. 6..8 are the study's original layouts.
 export function magneticPresetSlot(s: MagneticRect, preset: number, index: number, count: number): MagneticRect {
   if (count <= 1) return s;
+  if (preset >= 6) return magneticStudySlot(s, preset, index, count);
   const left = magneticZoneRect(s, 1), right = magneticZoneRect(s, 2);
-  if (preset === 1 || preset === 6) {
-    const fraction = preset === 6 ? 0.60 : 2 / 3;
+  if (preset === 1) {
     const gap = Math.min(magneticGap(), s.w / 12);
-    const master = (s.w - gap) * fraction;
+    const master = (s.w - gap) * (2 / 3);
     if (index === 0) return cell(s, 0, 0, master, s.h);
     return magneticStrip(cell(s, master + gap, 0, s.w - master - gap, s.h), index - 1, count - 1, false);
   }
@@ -183,14 +214,6 @@ export function magneticPresetSlot(s: MagneticRect, preset: number, index: numbe
   if (preset === 5) {
     const offset = Math.min(42, Math.min(s.w, s.h) * 0.37 / (count - 1));
     return cell(s, index * offset, index * offset, s.w - offset * (count - 1), s.h - offset * (count - 1));
-  }
-  if (preset === 7) {
-    const wing = count === 2 ? 0.38 : 0.25;
-    const gap = Math.min(magneticGap(), s.w / 12);
-    const w = s.w * wing;
-    if (index === 1) return cell(s, 0, 0, w - gap / 2, s.h);
-    if (index === 0) return cell(s, w + gap / 2, 0, s.w - w - (count === 2 ? gap / 2 : w + gap), s.h);
-    return magneticStrip(cell(s, s.w - w + gap / 2, 0, w - gap / 2, s.h), index - 2, count - 2, false);
   }
   if (count === 2) return magneticZoneRect(s, 1 + index);
   if (count === 3) return magneticZoneRect(s, index === 2 ? 4 : 5 + index);

@@ -1,9 +1,12 @@
-import { magneticEdgeZone, magneticMonitorHandoff, magneticPresetSlot, magneticZoneRect } from "../ss/magnetic_layout.ss.ts";
+import {
+  magneticCascadeDelay, magneticDragRect, magneticEdgeFields, magneticEdgeZone, magneticMonitorHandoff, magneticPresetSlot,
+  magneticProject, magneticThrow, magneticWindowPlan, magneticWindowRegion, magneticZoneRect,
+} from "../ss/magnetic_layout.ss.ts";
 import { planMagneticNeighbors } from "../ss/magnetic_neighbors.ss.ts";
 import { magneticFrameFlat } from "../ss/magnetic_abi.ss.ts";
 import {
   createMagneticWindow, magneticAudit, magneticPickup, magneticPose, magneticSnapAnomaly,
-  magneticVisibility, retargetMagneticWindow, stepMagneticWindow,
+  magneticReducedMotion, magneticVisibility, retargetMagneticWindow, stepMagneticWindow,
 } from "../ss/magnetic_tiling.ss.ts";
 
 export function main(dtUs: number): readonly number[] {
@@ -43,6 +46,37 @@ export function main(dtUs: number): readonly number[] {
   trace.push(magneticMonitorHandoff(screen, otherScreen, 1455, 500, 24) ? 1 : 0);
   trace.push(magneticMonitorHandoff(screen, otherScreen, 1470, 500, 24) ? 1 : 0);
   trace.push(magneticEdgeZone(screen, 720, 15, 0, 1));
+  trace.push(magneticEdgeFields(screen, 80, 24).left);
+  const from = { x: 80, y: 60, w: 480, h: 310 };
+  const to = magneticZoneRect(screen, 2);
+  const drag = magneticDragRect(screen, from, 1500, -60, 15, 10, 0.72, to, 0.42, 720, 414);
+  trace.push(drag.x);
+  trace.push(drag.y);
+  trace.push(drag.w);
+  trace.push(drag.h);
+  const fling = magneticThrow(screen, drag, 900, -100);
+  trace.push(fling.x);
+  trace.push(fling.y);
+  const project = magneticProject(pose.cx, pose.cy, 74, 720, 414);
+  trace.push(project.x);
+  trace.push(project.y);
+  const region = magneticWindowRegion(to, to.x + 4, to.y + to.h / 2, false);
+  const swap = magneticWindowPlan(screen, from, to, 0, 300, 220);
+  const split = magneticWindowPlan(screen, from, to, region, 300, 220);
+  trace.push(swap.kind);
+  trace.push(swap.neighbor.x);
+  trace.push(split.kind);
+  trace.push(split.primary.w);
+  trace.push(magneticCascadeDelay(2, true));
+  trace.push(magneticCascadeDelay(2, false));
+  state = magneticVisibility(magneticReducedMotion(state, true), true);
+  for (let i = 0; i < 25; i++) {
+    state = stepMagneticWindow(state, dtUs).state;
+    const p = magneticPose(state, dock);
+    trace.push(p.glass);
+    trace.push(p.content);
+    trace.push(p.hidden ? 1 : 0);
+  }
   for (let z = 1; z <= 15; z++) {
     const rect = magneticZoneRect(screen, z);
     trace.push(rect.x);

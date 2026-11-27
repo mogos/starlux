@@ -105,7 +105,9 @@ class FakeMagneticPane extends FakePane {
   getAttribute(key: string): string | null { return this.attrs.get(key) ?? null; }
   removeAttribute(key: string): void { this.attrs.delete(key); }
   querySelector(): null { return null; }
-  append(node: FakeMagneticPane): void { node.parent = this; this.nodes.add(node); }
+  append(...nodes: FakeMagneticPane[]): void {
+    for (const node of nodes) { node.parent = this; this.nodes.add(node); }
+  }
   remove(): void { this.parent?.nodes.delete(this); }
 }
 

@@ -57,7 +57,10 @@ export type MagneticPreview = {
   readonly rect: MagneticRect; readonly target: MagneticRect; readonly opacity: number;
   readonly neighbors: readonly MagneticRect[]; readonly kind: string; readonly zone?: MagneticZone;
 };
-type WindowEntry = { window: MagneticWindow; dock: MagneticDock; free: MagneticRect; previous?: MagneticRect; zone?: MagneticZone };
+type WindowEntry = {
+  window: MagneticWindow; dock: MagneticDock; free: MagneticRect;
+  previous?: { rect: MagneticRect; monitorId: string }; zone?: MagneticZone;
+};
 type Plan = {
   readonly target: MagneticRect; readonly placements: ReadonlyMap<string, MagneticRect>; readonly kind: string;
   readonly slot?: number; readonly neighbor?: string; readonly region?: number; readonly zone?: MagneticZone;
@@ -84,6 +87,10 @@ export function magneticCamera(monitors: readonly MagneticMonitor[]) {
 }
 const center = (rect: MagneticRect) => ({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 });
 const axes = (r: MagneticRect) => [r.x, r.y, r.x + r.w, r.y + r.h] as const;
+const fitWorkspace = (r: MagneticRect, source: MagneticRect, target: MagneticRect): MagneticRect => ({
+  x: target.x + (r.x - source.x) * target.w / source.w, y: target.y + (r.y - source.y) * target.h / source.h,
+  w: r.w * target.w / source.w, h: r.h * target.h / source.h,
+});
 
 function validateRect(r: MagneticRect): void {
   if (![r.x, r.y, r.w, r.h].every(Number.isFinite) || r.w <= 0 || r.h <= 0) {
@@ -131,6 +138,7 @@ export class MagneticTiling {
   private preset: MagneticPreset = "free";
   private reduced: boolean;
   private ghostPlan: Plan | undefined;
+  private ghostSubject: string | undefined;
   private ghostEdges = axes({ x: 0, y: 0, w: 0, h: 0 }).map((value) => magneticSpring(value, 0.20, 1));
   private ghostAlpha = magneticSpring(0, 0.16, 1);
 
@@ -165,7 +173,7 @@ export class MagneticTiling {
     const [l, t, r, b] = this.ghostEdges;
     const rect = { x: l!.position, y: t!.position, w: r!.position - l!.position, h: b!.position - t!.position };
     return { rect, target: p.target, opacity: this.ghostAlpha.position, kind: p.kind,
-      neighbors: [...p.placements].filter(([id]) => id !== this.drag?.id).map(([, rect]) => rect),
+      neighbors: [...p.placements].filter(([id]) => id !== this.ghostSubject).map(([, rect]) => rect),
       ...(p.zone ? { zone: p.zone } : {}) };
   }
 
@@ -202,14 +210,13 @@ export class MagneticTiling {
       const old = previous.get(entry.window.monitorId);
       const target = workspace(this.monitor(id));
       entry.window = { ...entry.window, monitorId: id };
-      if (old && !same(workspace(old), target)) {
-        const source = workspace(old);
-        const scale = (r: MagneticRect) => ({
-          x: target.x + (r.x - source.x) * target.w / source.w, y: target.y + (r.y - source.y) * target.h / source.h,
-          w: r.w * target.w / source.w, h: r.h * target.h / source.h,
-        });
-        entry.free = scale(entry.free);
-        if (entry.previous) entry.previous = scale(entry.previous);
+      if (old && !same(workspace(old), target)) entry.free = fitWorkspace(entry.free, workspace(old), target);
+      if (entry.previous) {
+        const before = previous.get(entry.previous.monitorId);
+        const after = replacement.get(entry.previous.monitorId) ?? this.monitor(id);
+        if (before && (before.id !== after.id || !same(workspace(before), workspace(after)))) {
+          entry.previous = { rect: fitWorkspace(entry.previous.rect, workspace(before), workspace(after)), monitorId: after.id };
+        }
       }
       if (entry.zone) entry.free = magneticZoneRect(target, magneticZones.indexOf(entry.zone));
     }
@@ -242,6 +249,7 @@ export class MagneticTiling {
     this.gathered = this.gathered.filter((value) => value !== id);
     this.wave = this.wave.filter((job) => job.id !== id);
     if (this.focusId === id) this.refocus(id);
+    if (this.gathered.length === 0) this.gathering = false;
     this.relayout();
     this.publish();
   }
@@ -321,7 +329,8 @@ export class MagneticTiling {
   unsnap(id: string): void {
     const entry = this.entry(id);
     if (!entry.previous) return;
-    entry.free = entry.previous;
+    entry.free = entry.previous.rect;
+    entry.window = { ...entry.window, monitorId: entry.previous.monitorId };
     delete entry.previous;
     delete entry.zone;
     this.target(entry, entry.free, 0.46);
@@ -558,7 +567,10 @@ export class MagneticTiling {
     }
     this.ghostAlpha = stepMagneticSpring(this.ghostAlpha, dtUs, false);
     this.ghostEdges = this.ghostEdges.map((edge) => stepMagneticSpring(edge, dtUs, true));
-    if (this.ghostAlpha.position === 0 && this.ghostAlpha.target === 0) this.ghostPlan = undefined;
+    if (this.ghostAlpha.position === 0 && this.ghostAlpha.target === 0) {
+      this.ghostPlan = undefined;
+      this.ghostSubject = undefined;
+    }
   }
   private pointerVelocity(d: Drag, at: number) {
     const first = d.history.find((sample) => at - sample.at < 110);
@@ -635,6 +647,7 @@ export class MagneticTiling {
     this.ghostAlpha = magneticTarget(this.ghostAlpha, plan ? 1 : 0, 0.16, 1, this.reduce, true);
     if (plan) {
       this.ghostPlan = plan;
+      this.ghostSubject = this.drag?.id;
       this.ghostEdges = axes(plan.target).map((goal, i) =>
         magneticTarget(this.ghostEdges[i]!, goal, 0.20, 1, fresh || this.reduce, true));
     }
@@ -648,7 +661,7 @@ export class MagneticTiling {
       let next = 0;
       this.order = this.order.map((id) => included.has(id) ? plan.order![next++]! : id);
     } else {
-      if (plan.zone && !entry.zone) entry.previous = entry.free;
+      if (plan.zone && !entry.zone) entry.previous = { rect: entry.free, monitorId: oldMonitor };
       for (const [targetId, rect] of plan.placements) {
         const neighbor = this.entry(targetId);
         neighbor.free = rect;

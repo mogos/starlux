@@ -1,5 +1,5 @@
 import {
-  MagneticTiling, magneticCamera, magneticMoving, magneticPerspective, magneticSpringCount,
+  MagneticTiling, magneticCamera, magneticMoving, magneticPerspective, magneticProject, magneticSpringCount,
 } from "../magnetic-tiling.ts";
 import type {
   MagneticEvent, MagneticMonitor, MagneticOptions, MagneticRect, MagneticWindow,
@@ -105,7 +105,11 @@ export function mountMagneticTiling(root: HTMLElement, options: MagneticDomOptio
   });
   const byId = new Map(windows.map((entry) => [entry.id, entry]));
   const ghostNodes: HTMLElement[] = [];
-  const trails = new Map<string, HTMLElement[]>();
+  type OnionSample = {
+    outline: HTMLElement; tick: HTMLElement; segment: HTMLElement;
+    x: number; y: number; scale: number;
+  };
+  const trails = new Map<string, OnionSample[]>();
   let onionEnabled = options.onionEnabled ?? false;
   let lastOnion = -Infinity;
   let thermalTier = options.thermalTier ?? "nominal";
@@ -182,30 +186,66 @@ export function mountMagneticTiling(root: HTMLElement, options: MagneticDomOptio
     attr(dock, "aria-pressed", String(engine.focused === w.id));
   }
   function clearTrails(): void {
-    for (const nodes of trails.values()) for (const node of nodes) node.remove();
+    for (const samples of trails.values()) for (const sample of samples) removeOnion(sample);
     trails.clear();
     lastOnion = -Infinity;
+  }
+  function removeOnion(sample: OnionSample): void {
+    sample.outline.remove();
+    sample.tick.remove();
+    sample.segment.remove();
+  }
+  function onionNode(className: string): HTMLElement {
+    const node = doc.createElement("div");
+    node.className = className;
+    node.setAttribute("aria-hidden", "true");
+    node.style.position = "absolute";
+    node.style.pointerEvents = "none";
+    return node;
   }
   function sampleOnion(windows: readonly MagneticWindow[], now: number): void {
     if (!onionEnabled || !onionParent || now - lastOnion < 33000) return;
     lastOnion = now;
+    const camera = engine.camera;
     for (const w of windows) {
       if ((!w.dragging && magneticSpringCount(w.state) === 0) || w.pose.hidden) continue;
-      const node = doc.createElement("div");
-      node.className = "magnetic-onion-sample";
-      node.setAttribute("aria-hidden", "true");
-      node.style.position = "absolute";
-      node.style.pointerEvents = "none";
-      node.style.border = "1px solid currentColor";
-      node.style.borderRadius = "26px";
-      node.style.transform = transformOf(w);
-      box(node, w.state.box, (el, property, value) => el?.style.setProperty(property, value));
-      const nodes = trails.get(w.id) ?? [];
-      nodes.push(node);
-      if (nodes.length > 14) nodes.shift()?.remove();
-      nodes.forEach((node, index) => { node.style.opacity = String((index + 1) / nodes.length * 0.5); });
-      trails.set(w.id, nodes);
-      onionParent.append(node);
+      const { cx, cy, z, sx } = w.pose;
+      const point = magneticProject(cx, cy, z, camera.x, camera.y);
+      const samples = trails.get(w.id) ?? [];
+      const previous = samples.at(-1);
+      if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 3 && Math.abs(sx - previous.scale) < 0.004) continue;
+      const outline = onionNode("magnetic-onion-sample");
+      outline.style.border = "1px solid currentColor";
+      outline.style.borderRadius = "26px";
+      outline.style.transform = transformOf(w);
+      box(outline, w.state.box, (el, property, value) => el?.style.setProperty(property, value));
+
+      const tick = onionNode("magnetic-onion-tick");
+      tick.style.left = px(point.x);
+      tick.style.top = px(point.y);
+      tick.style.width = tick.style.height = "4px";
+      tick.style.transform = "translate(-50%, -50%)";
+      tick.style.borderRadius = "50%";
+      tick.style.backgroundColor = "currentColor";
+
+      const segment = onionNode("magnetic-onion-path");
+      if (previous) {
+        const dx = point.x - previous.x, dy = point.y - previous.y;
+        segment.style.left = px(previous.x);
+        segment.style.top = px(previous.y);
+        segment.style.width = px(Math.hypot(dx, dy));
+        segment.style.borderTop = "1px dashed currentColor";
+        segment.style.transformOrigin = "0 0";
+        segment.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+      }
+      samples.push({ outline, tick, segment, x: point.x, y: point.y, scale: sx });
+      if (samples.length > 14) {
+        removeOnion(samples.shift()!);
+        samples[0]?.segment.remove();
+      }
+      samples.forEach(({ outline }, index) => { outline.style.opacity = String(0.14 + 0.56 * index / samples.length); });
+      trails.set(w.id, samples);
+      onionParent.append(outline, segment, tick);
     }
   }
   function draw(): void {
@@ -334,6 +374,7 @@ export function mountMagneticTiling(root: HTMLElement, options: MagneticDomOptio
     const handle = entry.handle ?? entry.pane;
     style(entry.pane, "position", "absolute");
     style(handle, "touch-action", "none");
+    listen(entry.pane, "focusin", () => engine.focus(entry.id));
     listen(handle, "pointerdown", (event) => {
       const e = event as PointerEvent;
       const target = e.target as Element | null;

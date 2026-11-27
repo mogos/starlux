@@ -214,13 +214,17 @@ export function magneticPose(state: MagneticWindowState, dock: MagneticDock): Ma
 
   const u = clamp(state.m.position, -0.25, 1.1), uc = clamp01(u), a = 1 - uc;
   const c1y = cy - 40;
-  const c2y = dock.y - Math.max(80, (dock.y - cy) * 0.55);
+  const drop = (dock.y - cy) * 0.55;
+  const c2y = dock.y - Math.max(80, drop);
+  const c2Rate = drop > 80 ? 0.55 : 0;
   const dx = 6 * a * uc * (dock.x - cx);
   const dy = 3 * a * a * (c1y - cy) + 6 * a * uc * (c2y - c1y) + 3 * uc * uc * (dock.y - c2y);
   const x = magneticMix(cx, dock.x, uc * uc * (3 - 2 * uc));
   const y = a * a * a * cy + 3 * a * a * uc * c1y + 3 * a * uc * uc * c2y + uc * uc * uc * dock.y + dy * (u - uc);
   const arcVx = dx * state.m.velocity, arcVy = dy * state.m.velocity;
   const arcSpeed = magneticLength(arcVx, arcVy);
+  const baseVy = vy * (a * a * a + 3 * a * a * uc + 3 * a * uc * uc * c2Rate -
+    3 * c2Rate * Math.max(0, u - 1));
   const scale = exp64(ln64(Math.max(1, dock.size) / Math.min(w, h)) * (0.7 * u + (u < 0 ? 0 : 0.3 * u * u)));
   let arcSquash = pose.squash;
   if (arcSpeed > 1) arcSquash = Math.max(pose.squash, Math.min(0.07, arcSpeed / 60000));
@@ -228,7 +232,7 @@ export function magneticPose(state: MagneticWindowState, dock: MagneticDock): Ma
     z: magneticMix(pose.z, dock.z, 1 - a * a) + 56 * sin64(3.141592653589793 * uc),
     rz: pose.rz + clamp(arcVx * 0.0012, -4, 4),
     vx: vx * (1 - uc * uc * (3 - 2 * uc)) + arcVx,
-    vy: vy * (a * a * a + 3 * a * a * uc + (cy + 80 < dock.y && (dock.y - cy) * 0.55 > 80 ? 1.65 * a * uc * uc : 0)) + arcVy,
+    vy: baseVy + arcVy,
     squash: arcSquash,
     phi: arcSpeed > 1 ? atan2_64(arcVy, arcVx) : pose.phi,
     content: pose.content * (1 - magneticSmooth(0.06, 0.48, u)),

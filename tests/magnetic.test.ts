@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import {
   auditSettledInvariants, createMagneticWindow, magneticAudit, magneticEdgeFields, magneticEdgeZone,
   magneticFrameFlat, magneticIntersection, magneticMonitorHandoff, magneticPickup, magneticPose, magneticRect,
-  magneticSnapAnomaly, magneticSpringCount, magneticVisibility, magneticZoneRect, MagneticTiling, mountMagneticTiling,
+  magneticSnapAnomaly, magneticSpringCount, magneticVisibility, magneticWindowPlan, magneticZoneRect, MagneticTiling, mountMagneticTiling,
   planMagneticNeighbors, retargetMagneticWindow, stepMagneticWindow,
 } from "../src/index.ts";
 import type { MagneticEvent, MagneticPreset, MagneticWindowState } from "../src/index.ts";
@@ -186,6 +186,10 @@ test("monitor handoff requires the pointer to cross the barrier and preview foll
   expect(engine.window("a").monitorId).toBe("two");
   expect(engine.window("a").state.goal.x).toBe(1200);
   expect(auditSettledInvariants(engine.window("a")).passed).toBe(true);
+  engine.unsnap("a");
+  engine.runMs(1800);
+  expect(engine.window("a").monitorId).toBe("one");
+  expect(engine.window("a").state.goal).toEqual(rect);
 });
 
 test("dwell latches window swaps and cancellation returns to the original slot", () => {
@@ -207,6 +211,39 @@ test("dwell latches window swaps and cancellation returns to the original slot",
   engine.runMs(1600);
   expect(engine.window("c").state.goal).toEqual(rect);
   expect(engine.window("a").state.goal.x).toBe(650);
+});
+
+test("window magnets split usable panes and dock beside narrower neighbors", () => {
+  const wide = { x: 350, y: 100, w: 700, h: 500 };
+  const split = magneticWindowPlan(screen, rect, wide, 1, 300, 220);
+  expect(split.kind).toBe(2);
+  expect(split.primary.x).toBe(wide.x);
+  expect(magneticIntersection(split.primary, split.neighbor)).toBe(0);
+  const narrow = { ...wide, w: 400 };
+  const docked = magneticWindowPlan(screen, rect, narrow, 2, 300, 220);
+  expect(docked.kind).toBe(3);
+  expect(docked.primary.x).toBe(narrow.x + narrow.w + 12);
+  expect(docked.neighbor).toEqual(narrow);
+  expect(magneticWindowPlan(screen, rect, { ...narrow, x: 800 }, 2, 300, 220).kind).toBe(0);
+});
+
+test("preset slot ghosts reorder windows and show companion targets", () => {
+  const engine = scene();
+  engine.setLayout("bento");
+  engine.runMs(1500);
+  const a = engine.window("a").state.goal;
+  const b = engine.window("b").state.goal;
+  engine.beginDrag("a", a.x + 30, a.y + 30);
+  engine.moveDrag(b.x + b.w / 2, b.y + b.h / 2, 20);
+  engine.runMs(80);
+  expect(engine.preview?.kind).toBe("reorder");
+  expect(engine.preview?.target).toEqual(b);
+  expect(engine.preview?.neighbors).toEqual([a]);
+  engine.endDrag();
+  engine.runMs(1600);
+  expect(engine.window("a").state.goal).toEqual(b);
+  expect(engine.window("b").state.goal).toEqual(a);
+  expect(engine.windows.every((w) => auditSettledInvariants(w).passed)).toBe(true);
 });
 
 test("layout morph dips content before its destination box swap", () => {
