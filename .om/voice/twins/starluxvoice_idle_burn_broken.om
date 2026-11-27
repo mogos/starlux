@@ -1,0 +1,67 @@
+om 0.1
+model starluxvoice_idle_burn_broken
+
+var voice_state: 0..3 = 0
+var wake_held: 0..1 = 0
+var settled: 0..1 = 1
+var idle_ticks: 0..2 = 0
+var reduced_motion: 0..1 = 0
+var phase_moved: 0..1 = 0
+var vad_state: 0..1 = 0
+var vad_hangover: 0..2 = 0
+
+action enable_reduced by system
+  when reduced_motion == 0 and voice_state == 0 and settled == 1
+  then reduced_motion := 1, phase_moved := 0
+
+action enter_listen by system
+  when voice_state == 0
+  then voice_state := 1, wake_held := 1, settled := 0, idle_ticks := 0
+
+action enter_speak by system
+  when voice_state == 1
+  then voice_state := 2, wake_held := 1, settled := 0, vad_state := 1, vad_hangover := 2
+
+action enter_error by system
+  when voice_state <= 2
+  then voice_state := 3, wake_held := 1, settled := 0
+
+action step_active_motion by system
+  when voice_state > 0 and wake_held == 1 and reduced_motion == 0
+  then phase_moved := 1
+
+action step_active_reduced by system
+  when voice_state > 0 and wake_held == 1 and reduced_motion == 1
+  then phase_moved := 0
+
+action vad_mid_band_hold by system
+  when vad_state == 1 and vad_hangover > 0
+  then vad_state := 1, vad_hangover := vad_hangover - 1
+
+action vad_silence_close by system
+  when vad_state == 1 and vad_hangover == 0
+  then vad_state := 0
+
+action request_rest by system
+  when voice_state > 0
+  then voice_state := 0, wake_held := 1, settled := 0, vad_state := 0, vad_hangover := 0
+
+action settle_to_idle by system
+  when voice_state == 0 and settled == 0 and wake_held == 1
+  then settled := 1, wake_held := 0, idle_ticks := 0
+
+action idle_poll by system
+  when voice_state == 0 and settled == 1 and wake_held == 0
+  then idle_ticks := (if idle_ticks < 2 then idle_ticks + 1 else 2)
+
+claim rest_zero_idle_ticks "Settled rest holds zero wake tokens and zero idle ticks." rule R-V01
+  always ((voice_state == 0 and settled == 1) implies (wake_held == 0 and idle_ticks == 0))
+
+claim active_state_holds_wake "Every active non-rest voice state holds an active wake token." rule R-V02
+  always ((voice_state > 0) implies (wake_held == 1))
+
+claim reduced_motion_freezes_phase "Reduced motion freezes oscillation phase across active frames." rule R-V03
+  always ((reduced_motion == 1) implies (phase_moved == 0))
+
+claim vad_hysteresis_no_premature_drop "Schmitt VAD never drops while hangover frames remain." rule R-V04
+  always ((vad_hangover > 0) implies (vad_state == 1))

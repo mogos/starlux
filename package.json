@@ -11,6 +11,7 @@
     "./physics": { "types": "./dist/src/physics.d.ts", "default": "./dist/src/physics.js" },
     "./sensory": { "types": "./dist/ss/sensory.ss.d.ts", "default": "./dist/ss/sensory.ss.js" },
     "./living-state": { "types": "./dist/ss/living-state.ss.d.ts", "default": "./dist/ss/living-state.ss.js" },
+    "./voice": { "types": "./dist/src/voice.d.ts", "default": "./dist/src/voice.js" },
     "./dom": { "types": "./dist/src/dom/controller.d.ts", "default": "./dist/src/dom/controller.js" },
     "./c": { "types": "./c/index.d.ts", "default": "./c/index.js" },
     "./magnetic-tiling": { "types": "./dist/src/magnetic-tiling.d.ts", "default": "./dist/src/magnetic-tiling.js" },
