@@ -5,6 +5,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef __cplusplus
+#include <stdatomic.h>
+typedef _Atomic uint32_t sl_atomic_u32;
+#else
+#include <atomic>
+typedef std::atomic<uint32_t> sl_atomic_u32;
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,12 +57,14 @@ uint32_t sl_audio_active(const sl_audio *s);
 uint32_t sl_audio_quanta(const sl_audio *s);
 int32_t  sl_audio_peak_hold(const sl_audio *s);
 
-/* Power-of-two 4096-frame stereo SPSC PCM ring for native push hosts (star0, starland, starnative). */
+/* Power-of-two 4096-frame stereo SPSC PCM ring for native push hosts (star0, starland, starnative).
+ * write_idx and read_idx use C11/C17 _Atomic uint32_t with acquire/release ordering.
+ */
 typedef struct sl_pcm_ring {
-  int16_t  samples[SL_AUDIO_RING_FRAMES * 2u];
-  uint32_t write_idx;
-  uint32_t read_idx;
-  uint32_t underruns;
+  int16_t       samples[SL_AUDIO_RING_FRAMES * 2u];
+  sl_atomic_u32 write_idx;
+  sl_atomic_u32 read_idx;
+  uint32_t      underruns;
 } sl_pcm_ring;
 
 void     sl_pcm_ring_init(sl_pcm_ring *ring);

@@ -187,25 +187,53 @@ export function stepVoiceMachine(
     };
   }
 
-  if (wakeToken === 0) {
-    const acq = acquireWake(clock, "body");
-    clock = acq.clock;
-    wakeToken = acq.token;
-  }
-
-  const ticked = dispatchClock(clock, clock.generation);
-  clock = ticked.clock;
-  const nextActiveTicks = machine.activeTicks + (ticked.accepted ? 1 : 0);
-
   // PLANT:voice_reduced_motion
   if (machine.reducedMotion) {
     const staticPresence = curState === VOICE_REST ? 0 : 1;
-    const staticEnergy = curState === VOICE_REST ? 0 : clamp(voiceStateTargetEnergy(curState, inputEnergy) * 0.55, 0.2, 0.55);
-    let nextToken = wakeToken;
-    let nextClock = clock;
-    if (curState === VOICE_REST && reqState === VOICE_REST && nextToken > 0) {
-      nextClock = releaseWake(nextClock, nextToken);
-      nextToken = 0;
+    const staticEnergy = curState === VOICE_REST
+      ? 0
+      : clamp(voiceStateTargetEnergy(curState, inputEnergy) * 0.55, 0.2, 0.55);
+    const alreadyStatic =
+      curState === machine.state &&
+      curState === reqState &&
+      pendingDwellUs === 0 &&
+      Math.abs(staticEnergy - machine.energy) <= 0.0001 &&
+      staticPresence === machine.presence;
+    if (alreadyStatic) {
+      if (wakeToken > 0) {
+        clock = releaseWake(clock, wakeToken);
+        wakeToken = 0;
+      }
+      return {
+        state: curState,
+        targetState: reqState,
+        pendingState: pendingState,
+        pendingDwellUs: 0,
+        energy: staticEnergy,
+        energyVel: 0,
+        presence: staticPresence,
+        presenceVel: 0,
+        phase: machine.phase,
+        stateAgeUs: stateAgeUs,
+        settleRestFrames: curState === VOICE_REST ? machine.settleRestFrames + 1 : 0,
+        clock: clock,
+        wakeToken: 0,
+        activeTicks: machine.activeTicks,
+        idleSkippedTicks: machine.idleSkippedTicks + 1,
+        reducedMotion: true,
+      };
+    }
+    if (wakeToken === 0) {
+      const acq = acquireWake(clock, "body");
+      clock = acq.clock;
+      wakeToken = acq.token;
+    }
+    const rmTicked = dispatchClock(clock, clock.generation);
+    clock = rmTicked.clock;
+    const rmActiveTicks = machine.activeTicks + (rmTicked.accepted ? 1 : 0);
+    if (curState === reqState && pendingDwellUs === 0 && wakeToken > 0) {
+      clock = releaseWake(clock, wakeToken);
+      wakeToken = 0;
     }
     return {
       state: curState,
@@ -219,13 +247,23 @@ export function stepVoiceMachine(
       phase: machine.phase,
       stateAgeUs: stateAgeUs,
       settleRestFrames: curState === VOICE_REST ? machine.settleRestFrames + 1 : 0,
-      clock: nextClock,
-      wakeToken: nextToken,
-      activeTicks: nextActiveTicks,
+      clock: clock,
+      wakeToken: wakeToken,
+      activeTicks: rmActiveTicks,
       idleSkippedTicks: machine.idleSkippedTicks,
       reducedMotion: true,
     };
   }
+
+  if (wakeToken === 0) {
+    const acq = acquireWake(clock, "body");
+    clock = acq.clock;
+    wakeToken = acq.token;
+  }
+
+  const ticked = dispatchClock(clock, clock.generation);
+  clock = ticked.clock;
+  const nextActiveTicks = machine.activeTicks + (ticked.accepted ? 1 : 0);
 
   const targetEnergy = voiceStateTargetEnergy(curState, inputEnergy);
   const targetPresence = curState === VOICE_REST ? 0 : 1;

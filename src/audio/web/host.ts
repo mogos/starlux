@@ -4,6 +4,7 @@
 //   - Acquires ONE @mogos/starlux WakeToken on admitted audio work; releases immediately when drained.
 //   - Arms ONE generation-tagged 1600 ms warm-context linger timer, then suspends AudioContext cleanly.
 //   - Serializes resume/suspend with generation guards so stale promises cannot suspend fresh audio.
+//   - Connects AudioWorkletNode -> context.destination and listens for { type: "drained" } in browser contexts.
 //   - At settled rest: 0 held WakeTokens, 0 DSP calls, 0 timers, suspended AudioContext.
 
 import {
@@ -15,35 +16,58 @@ import {
   type PlanEvalResult,
   armAdmissionFromGesture,
   audioLingerUs,
+  clampRate100,
   createAdmissionState,
   createAudioLease,
   evaluatePlan,
+  frameDiff,
   getAudioCue,
   leaseForceSuspend,
   leaseMaySuspend,
   leaseOnAdmit,
   leaseOnDrained,
   leaseSuspend,
+  scaleOffsetByRate,
   setAdmissionMuted,
   usToFrames,
+  wrapU32,
 } from "../../../ss/audio/index.ss.ts";
 import { falsifyIdle, type IdleFalsifier, type IdleSample } from "../../../ss/lux/idle.ss.ts";
 import { heldWakeTokens } from "../../../ss/lux/wake.ss.ts";
-import { StarluxAudioWorkletCore } from "./worklet.ts";
+import { StarluxAudioWorkletCore, type WorkletMessage } from "./worklet.ts";
+
+export interface AudioWorkletNodeLike {
+  readonly port: {
+    onmessage: ((ev: { readonly data: unknown }) => void) | null;
+    postMessage(data: unknown): void;
+  };
+  connect(destination: unknown): unknown;
+  disconnect?(): void;
+}
 
 export interface AudioContextLike {
   readonly state: "suspended" | "running" | "closed";
   readonly sampleRate: number;
+  readonly destination?: unknown;
+  readonly audioWorklet?: {
+    addModule(moduleUrl: string): Promise<void>;
+  };
   resume(): Promise<void>;
   suspend(): Promise<void>;
   close(): Promise<void>;
 }
+
+export type RemoteDrainHandler = (quantaRendered?: number, hostGen?: number) => void;
 
 export interface AudioHostScheduler {
   nowUs(): number;
   setTimer(delayMs: number, cb: () => void): number;
   clearTimer(id: number): void;
   createContext?(sampleRate: number): AudioContextLike;
+  connectWorklet?(
+    context: AudioContextLike,
+    onDrained: RemoteDrainHandler,
+  ): Promise<AudioWorkletNodeLike | null> | AudioWorkletNodeLike | null;
 }
 
 export interface TrustedGestureLike {
@@ -71,6 +95,9 @@ export class StarluxAudioHost {
   private admission: AdmissionState;
   private lease: AudioLease;
   private context: AudioContextLike | null = null;
+  private workletNode: AudioWorkletNodeLike | null = null;
+  private workletConnecting = false;
+  private readonly pendingWorkletMessages: WorkletMessage[] = [];
   private suspendTimer: number | null = null;
   private hidden = false;
   private lifecycleChain: Promise<void> = Promise.resolve();
@@ -85,7 +112,9 @@ export class StarluxAudioHost {
     this.admission = createAdmissionState();
     this.lease = createAudioLease();
     this.worklet = new StarluxAudioWorkletCore(() => {
-      this.handleDrained(this.scheduler.nowUs());
+      if (this.lease.token > 0) {
+        this.handleDrained(this.scheduler.nowUs());
+      }
     });
   }
 
@@ -94,24 +123,25 @@ export class StarluxAudioHost {
     if (!gesture.isTrusted) return false;
     this.admission = armAdmissionFromGesture(this.admission, true, optIn);
     if (!optIn) {
-      this.worklet.postMessage({ type: "mute" });
+      this.postToWorklet({ type: "mute", hostGen: this.lease.generation });
       return true;
     }
-    this.worklet.postMessage({ type: "unmute" });
+    this.postToWorklet({ type: "unmute", hostGen: this.lease.generation });
     if (this.context === null) {
       this.context = this.scheduler.createContext
         ? this.scheduler.createContext(48000)
         : createFallbackContext();
+      this.attachWorkletIfSupported(this.context);
     }
     return true;
   }
 
   mute(): void {
     this.admission = setAdmissionMuted(this.admission, true);
-    this.worklet.postMessage({ type: "mute" });
     this.clearPendingTimer();
     this.lease = leaseForceSuspend(this.lease);
     const gen = this.lease.generation;
+    this.postToWorklet({ type: "mute", hostGen: gen });
     this.enqueueLifecycle(async () => {
       if (this.context !== null && this.lease.generation === gen && this.context.state === "running") {
         await this.context.suspend();
@@ -122,17 +152,17 @@ export class StarluxAudioHost {
   unmute(): boolean {
     if (!this.admission.armed) return false;
     this.admission = setAdmissionMuted(this.admission, false);
-    this.worklet.postMessage({ type: "unmute" });
+    this.postToWorklet({ type: "unmute", hostGen: this.lease.generation });
     return true;
   }
 
   setHidden(hidden: boolean): void {
     this.hidden = hidden;
     if (hidden) {
-      this.worklet.postMessage({ type: "cancel", subject: 0, epoch: 0 });
       this.clearPendingTimer();
       this.lease = leaseForceSuspend(this.lease);
       const gen = this.lease.generation;
+      this.postToWorklet({ type: "cancel", subject: 0, epoch: 0, hostGen: gen });
       this.enqueueLifecycle(async () => {
         if (this.context !== null && this.lease.generation === gen && this.context.state === "running") {
           await this.context.suspend();
@@ -142,7 +172,10 @@ export class StarluxAudioHost {
   }
 
   cancel(subject: number, epoch: number): void {
-    this.worklet.postMessage({ type: "cancel", subject, epoch });
+    this.postToWorklet({ type: "cancel", subject, epoch, hostGen: this.lease.generation });
+    if (!this.worklet.isActive() && this.lease.token > 0) {
+      this.handleDrained(this.scheduler.nowUs());
+    }
   }
 
   dispatchPlan(arena: PlanArena, rootFx: number, ctx: EffectContext): PlanEvalResult {
@@ -178,13 +211,14 @@ export class StarluxAudioHost {
   ): boolean {
     if (this.hidden || this.admission.muted || !this.admission.armed) return false;
     const cue = getAudioCue(cueId);
-    const baseFrame = this.worklet.snapshot().frame + usToFrames(options?.delayUs ?? 0);
+    const rate = clampRate100(options?.rate100 ?? 100);
+    const baseFrame = wrapU32(this.worklet.snapshot().frame + usToFrames(options?.delayUs ?? 0));
     const cmds: AudioCommand[] = [];
     for (let i = 0; i < cue.hits.length; i++) {
       const hit = cue.hits[i];
       if (hit === undefined) break;
       cmds.push({
-        atFrame: baseFrame + hit.startFrames,
+        atFrame: wrapU32(baseFrame + scaleOffsetByRate(hit.startFrames, rate)),
         seq: this.originFrame + 1,
         hitIndex: i,
         subject: options?.subject ?? 1,
@@ -193,7 +227,7 @@ export class StarluxAudioHost {
         cueId: cue.id,
         gainQ15: options?.gainQ15 ?? 32768,
         pan: options?.pan ?? 0,
-        rate100: options?.rate100 ?? 100,
+        rate100: rate,
         materialOverride: options?.materialOverride ?? -1,
         pitchCents: options?.pitchCents ?? 0,
         op: 0,
@@ -212,7 +246,11 @@ export class StarluxAudioHost {
       outRight.fill(0, 0, Math.min(frames, outRight.length));
       return 0;
     }
-    return this.worklet.processQuantum(outLeft, outRight, frames);
+    const active = this.worklet.processQuantum(outLeft, outRight, frames);
+    if (!this.worklet.isActive() && this.lease.token > 0) {
+      this.handleDrained(this.scheduler.nowUs());
+    }
+    return active;
   }
 
   flushLifecycle(): Promise<void> {
@@ -256,6 +294,14 @@ export class StarluxAudioHost {
   dispose(): void {
     this.clearPendingTimer();
     this.lease = leaseForceSuspend(this.lease);
+    this.pendingWorkletMessages.length = 0;
+    const node = this.workletNode;
+    this.workletNode = null;
+    this.workletConnecting = false;
+    if (node !== null) {
+      node.port.onmessage = null;
+      node.disconnect?.();
+    }
     const ctx = this.context;
     this.context = null;
     if (ctx !== null && ctx.state !== "closed") {
@@ -264,17 +310,70 @@ export class StarluxAudioHost {
   }
 
   private admitCommands(commands: readonly AudioCommand[]): void {
+    if (commands.length === 0) return;
+    const nextGen = this.lease.generation + 1;
+    const origin = this.worklet.snapshot().frame;
+    for (const cmd of commands) {
+      const rel = Math.max(0, frameDiff(cmd.atFrame, origin));
+      this.postToWorklet({ type: "cmd", command: cmd, relativeFrames: rel, hostGen: nextGen });
+    }
+    // If every submitted command was rejected/dropped and nothing is active, do not leak WakeToken or AudioContext!
+    if (!this.worklet.isActive()) {
+      if (this.lease.token > 0) {
+        this.handleDrained(this.scheduler.nowUs());
+      }
+      return;
+    }
     this.clearPendingTimer();
     this.lease = leaseOnAdmit(this.lease);
     const gen = this.lease.generation;
-    for (const cmd of commands) {
-      this.worklet.postMessage({ type: "cmd", command: cmd });
-    }
     this.enqueueLifecycle(async () => {
       if (this.context !== null && this.lease.generation === gen && !this.lease.suspended && this.context.state === "suspended") {
         await this.context.resume();
       }
     });
+  }
+
+  private postToWorklet(msg: WorkletMessage): void {
+    this.worklet.postMessage(msg);
+    if (this.workletNode !== null) {
+      this.workletNode.port.postMessage(msg);
+    } else if (this.workletConnecting) {
+      this.pendingWorkletMessages.push(msg);
+    }
+  }
+
+  private attachWorkletIfSupported(ctx: AudioContextLike): void {
+    if (this.scheduler.connectWorklet === undefined) return;
+    if (ctx.audioWorklet === undefined && ctx.destination === undefined) return;
+    this.workletConnecting = true;
+    const connectFn = this.scheduler.connectWorklet;
+    this.enqueueLifecycle(async () => {
+      try {
+        const node = await connectFn(ctx, (quanta, hostGen) => {
+          this.handleRemoteDrained(quanta, hostGen);
+        });
+        if (node !== null && this.context === ctx) {
+          this.workletNode = node;
+          for (const msg of this.pendingWorkletMessages) {
+            node.port.postMessage(msg);
+          }
+        }
+      } finally {
+        this.workletConnecting = false;
+        this.pendingWorkletMessages.length = 0;
+      }
+    });
+  }
+
+  private handleRemoteDrained(quantaRendered?: number, hostGen?: number): void {
+    if (hostGen !== undefined && hostGen !== this.lease.generation) {
+      return;
+    }
+    this.worklet.syncRemoteDrain(quantaRendered ?? 0);
+    if (this.lease.token > 0) {
+      this.handleDrained(this.scheduler.nowUs());
+    }
   }
 
   private handleDrained(nowUs: number): void {
@@ -307,17 +406,60 @@ export class StarluxAudioHost {
   }
 }
 
-function defaultBrowserScheduler(): AudioHostScheduler {
+export function defaultBrowserScheduler(): AudioHostScheduler {
   return {
     nowUs: () => Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) * 1000),
     setTimer: (delayMs, cb) => Number(setTimeout(cb, delayMs)),
     clearTimer: (id) => { clearTimeout(id); },
     createContext: (sampleRate) => {
-      const Ctor = (globalThis as unknown as { AudioContext?: new (opts: { sampleRate: number; latencyHint: string }) => AudioContextLike }).AudioContext;
+      const Ctor = (globalThis as unknown as {
+        AudioContext?: new (opts: { sampleRate: number; latencyHint: string }) => AudioContextLike;
+      }).AudioContext;
       if (typeof Ctor === "function") {
         return new Ctor({ sampleRate, latencyHint: "interactive" });
       }
       return createFallbackContext();
+    },
+    connectWorklet: async (ctx, onDrained) => {
+      const NodeCtor = (globalThis as unknown as {
+        AudioWorkletNode?: new (
+          context: AudioContextLike,
+          name: string,
+          options?: {
+            readonly numberOfInputs?: number;
+            readonly numberOfOutputs?: number;
+            readonly outputChannelCount?: readonly number[];
+          },
+        ) => AudioWorkletNodeLike;
+      }).AudioWorkletNode;
+      if (
+        ctx.audioWorklet === undefined ||
+        ctx.destination === undefined ||
+        typeof NodeCtor !== "function"
+      ) {
+        return null;
+      }
+      const moduleRel = import.meta.url.endsWith(".ts")
+        ? "./processor-entry.ts"
+        : "./processor-entry.js";
+      await ctx.audioWorklet.addModule(new URL(moduleRel, import.meta.url).href);
+      const node = new NodeCtor(ctx, "starlux-audio-processor", {
+        numberOfInputs: 0,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+      });
+      node.port.onmessage = (ev) => {
+        const payload = ev?.data as {
+          readonly type?: string;
+          readonly quanta?: number;
+          readonly hostGen?: number;
+        } | null | undefined;
+        if (payload !== null && payload !== undefined && payload.type === "drained") {
+          onDrained(payload.quanta, payload.hostGen);
+        }
+      };
+      node.connect(ctx.destination);
+      return node;
     },
   };
 }

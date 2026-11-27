@@ -139,13 +139,26 @@ describe("Starlux Voice 28-Style Backend", () => {
     }
     expect(hm.state).toBe(VOICE_SPEAK);
 
-    // reducedMotion freezes phase
+    // reducedMotion freezes phase AND releases wakeToken once static (zero static wake leak)
     let rm = stepVoiceMachine(createVoiceMachine(true), VOICE_SPEAK, 0.85, 16000, true);
+    expect(voiceHeldWakeTokens(rm)).toBe(0);
     const rPhase0 = rm.phase;
+    const rActive0 = rm.activeTicks;
     for (let i = 0; i < 30; i++) {
       rm = stepVoiceMachine(rm, VOICE_SPEAK, 0.85, 16000, false);
     }
     expect(rm.phase).toBe(rPhase0);
+    expect(voiceHeldWakeTokens(rm)).toBe(0);
+    expect(rm.activeTicks).toBe(rActive0);
+    expect(rm.idleSkippedTicks).toBeGreaterThanOrEqual(30);
+
+    // reducedMotion still holds wakeToken while dwell hysteresis is in progress, then releases on snap
+    let rmDwell = stepVoiceMachine(createVoiceMachine(true), VOICE_LISTEN, 0.6, 8000, false);
+    expect(rmDwell.state).toBe(VOICE_REST);
+    expect(voiceHeldWakeTokens(rmDwell)).toBe(1);
+    rmDwell = stepVoiceMachine(rmDwell, VOICE_LISTEN, 0.6, 8000, false);
+    expect(rmDwell.state).toBe(VOICE_LISTEN);
+    expect(voiceHeldWakeTokens(rmDwell)).toBe(0);
   });
 
   test("VoiceSignalProcessor computes 8-band Goertzel energy conservation and Schmitt VAD hysteresis", () => {

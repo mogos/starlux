@@ -1,9 +1,18 @@
 import { expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLightInput, defaultLightPolicy, encodeLightInput, shadeSurface, writeLightBytes } from "../src/light/index.ts";
+import { fileURLToPath } from "node:url";
+import {
+  createLightInput,
+  defaultLightPolicy,
+  encodeLightInput,
+  instantiateLightWasm,
+  lightWasm,
+  shadeSurface,
+  writeLightBytes,
+} from "../src/light/index.ts";
 
 test("C11 and C17 callers match the Starscript packets without allocation", () => {
   const temp = mkdtempSync(join(tmpdir(), "starlux-light-native-"));
@@ -48,4 +57,27 @@ test("C11 and C17 callers match the Starscript packets without allocation", () =
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
+}, 60_000);
+
+test("source-mode lightWasm resolves dist/wasm/light/entry.ss.wasm and matches shadeSurface", async () => {
+  const wasmFile = fileURLToPath(lightWasm);
+  if (!existsSync(wasmFile)) {
+    const buildWasm = Bun.spawnSync(["bash", "c/light/build-wasm.sh", "dist/wasm/light"]);
+    expect(buildWasm.exitCode, buildWasm.stderr.toString()).toBe(0);
+  }
+  expect(existsSync(wasmFile)).toBe(true);
+  const wasm = await instantiateLightWasm();
+  const input = createLightInput(
+    { id: 7, x: 24, y: 40, width: 320, height: 140, radius: 16, blurPx: 18 },
+    defaultLightPolicy,
+    { pointer: { x: 120, y: 60, dispersion: 1.4 } },
+  );
+  const output = new Array<number>(1352).fill(0);
+  const scene = new Array<number>(8).fill(0);
+  const scratch = new Array<number>(14).fill(0);
+  expect(shadeSurface(input, output, scene, scratch)).toBe(0);
+  const res = wasm.starluxLightFrame(input);
+  expect(res.status).toBe(0);
+  expect(Array.from(res.packet)).toEqual(output);
+  expect(Array.from(res.scene)).toEqual(scene);
 }, 60_000);

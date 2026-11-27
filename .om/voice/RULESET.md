@@ -11,12 +11,12 @@ Claims: rest_zero_idle_ticks
 
 ## R-V02 Active State Wake Ownership
 Status: must-hold
-Rule: Any active non-rest voice state holds an active WakeToken until settled back to rest.
+Rule: Any full-motion active non-rest voice state holds an active WakeToken until settled back to rest.
 Claims: active_state_holds_wake
 
-## R-V03 Reduced-Motion Phase Freeze
+## R-V03 Reduced-Motion Phase Freeze and Static Wake Release
 Status: must-hold
-Rule: When reducedMotion is enabled, oscillation phase never advances across active frames.
+Rule: When reducedMotion is enabled, oscillation phase never advances across active frames and static frames hold zero WakeTokens.
 Claims: reduced_motion_freezes_phase
 
 ## R-V04 Schmitt VAD Hysteresis Hold

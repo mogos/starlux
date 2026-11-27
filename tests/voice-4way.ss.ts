@@ -100,14 +100,18 @@ export function main(dtUs: number): Voice4WayResult {
   }
   const dwellHysteresisOk = blockedEarly && hm.state === VOICE_SPEAK;
 
-  // 3. Verify reducedMotion freezes phase completely across active frames
+  // 3. Verify reducedMotion freezes phase completely and holds 0 WakeTokens across static frames
   let rm = createVoiceMachine(true);
   rm = stepVoiceMachine(rm, VOICE_SPEAK, 0.8, stepUs, true);
   const rmPhase0 = rm.phase;
+  const rmActive0 = rm.activeTicks;
   for (let i = 0; i < 20; i++) {
     rm = stepVoiceMachine(rm, VOICE_SPEAK, 0.8, stepUs, false);
   }
-  const reducedPhaseDelta = Math.abs(rm.phase - rmPhase0);
+  const reducedPhaseDelta =
+    Math.abs(rm.phase - rmPhase0) +
+    voiceHeldWakeTokens(rm) +
+    (rm.activeTicks - rmActive0);
 
   // 4. Verify 8-band Goertzel PCM energy conservation + Schmitt VAD hysteresis
   const loudPcm: number[] = [];

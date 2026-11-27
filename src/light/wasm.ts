@@ -1,6 +1,10 @@
 import { validLightInput } from "../../ss/light/scene.ss.ts";
 
-export const lightWasm = new URL("../../wasm/light/entry.ss.wasm", import.meta.url);
+const lightWasmRelPath = import.meta.url.endsWith(".ts")
+  ? "../../dist/wasm/light/entry.ss.wasm"
+  : "../../wasm/light/entry.ss.wasm";
+
+export const lightWasm = new URL(lightWasmRelPath, import.meta.url);
 
 export type WasmLightFrame = {
   readonly status: number;

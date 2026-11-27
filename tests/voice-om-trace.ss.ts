@@ -100,10 +100,10 @@ export function main(_input: number): string {
   let rm = createVoiceMachine(true);
   lines.push(row("enable_reduced", 0, 0, 1, 0, 1, 0, 0, 0));
   rm = stepVoiceMachine(rm, VOICE_LISTEN, 0.6, 16000, true);
-  lines.push(row("enter_listen", 1, voiceHeldWakeTokens(rm) > 0 ? 1 : 0, 0, 0, 1, 0, 0, 0));
+  lines.push(row("enter_listen", 1, voiceHeldWakeTokens(rm), 1, 0, 1, 0, 0, 0));
   const rmP0 = rm.phase;
   rm = stepVoiceMachine(rm, VOICE_LISTEN, 0.6, 16000, false);
-  lines.push(row("step_active_reduced", 1, 1, 0, 0, 1, rm.phase !== rmP0 ? 1 : 0, 0, 0));
+  lines.push(row("step_active_reduced", 1, voiceHeldWakeTokens(rm), 1, 0, 1, rm.phase !== rmP0 ? 1 : 0, 0, 0));
 
   let out = "";
   for (let i = 0; i < 32; i++) {

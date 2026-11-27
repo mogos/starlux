@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type AudioContextLike,
   type AudioHostScheduler,
+  type AudioWorkletNodeLike,
   type EffectContext,
   StarluxAudioHost,
   audioCeilingS16,
@@ -15,7 +16,9 @@ import {
   createAdmissionState,
   createPlanArena,
   createRenderState,
+  createStarluxAudioWorkletProcessor,
   cueIdBySlug,
+  defaultBrowserScheduler,
   evaluatePlan,
   getAudioCue,
   hapticFx,
@@ -23,6 +26,7 @@ import {
   audioSlugFx,
   panFromRect,
   renderBlock,
+  scaleOffsetByRate,
   sequence,
   stagger,
   submitCueCommands,
@@ -367,5 +371,214 @@ describe("@mogos/starlux/audio Web Host, WakeToken 0-idle, and Composable Algebr
     const seqOut = evaluatePlan(seq.arena, seq.fx, ctx, adm);
     expect(seqOut.audio.length).toBe(2);
     expect(seqOut.audio[1]!.atFrame - seqOut.audio[0]!.atFrame).toBe(2400); // 50 ms = 2400 frames
+  });
+
+  test("P0-SL3a: pre-quantum cancel() and sub-quantum drain release WakeToken and suspend AudioContext with zero leak", async () => {
+    const fake = createFakeScheduler();
+    const host = new StarluxAudioHost({ scheduler: fake.scheduler, lingerUs: 1600000 });
+    expect(host.enableFromTrustedGesture({ isTrusted: true }, true)).toBe(true);
+
+    // 1. Admit delayed cue, then cancel BEFORE any pumpQuantum runs
+    expect(host.submitCue(cueIdBySlug("control.press"), { subject: 42, epoch: 7, delayUs: 50000 })).toBe(true);
+    await host.flushLifecycle();
+    expect(host.metrics().heldTokens).toBe(1);
+    expect(host.metrics().contextState).toBe("running");
+
+    host.cancel(42, 7);
+    expect(host.metrics().heldTokens).toBe(0);
+    expect(host.metrics().pendingTimer).toBe(true);
+
+    fake.advanceMs(1600);
+    await host.flushLifecycle();
+    expect(host.metrics().contextState).toBe("suspended");
+    expect(host.metrics().suspended).toBe(true);
+    expect(fake.timerCount).toBe(0);
+
+    // 2. Sub-quantum immediate drain (gainQ15: 0 finishes inside first quantum) also releases WakeToken
+    expect(host.submitCue(cueIdBySlug("control.hover"), { subject: 43, epoch: 1, gainQ15: 0 })).toBe(true);
+    await host.flushLifecycle();
+    expect(host.metrics().heldTokens).toBe(1);
+    const l = new Float32Array(128);
+    const r = new Float32Array(128);
+    expect(host.pumpQuantum(l, r, 128)).toBe(0);
+    expect(host.metrics().heldTokens).toBe(0);
+    expect(host.metrics().pendingTimer).toBe(true);
+    fake.advanceMs(1600);
+    await host.flushLifecycle();
+    expect(host.metrics().contextState).toBe("suspended");
+    host.dispose();
+  });
+
+  test("P0-SL3b: submitCue scales multi-hit startFrames by rate100 identically to submitCueCommands", async () => {
+    let multiCue = getAudioCue(1);
+    for (let id = 1; id <= 250; id++) {
+      const c = getAudioCue(id);
+      if (c.hits.length >= 2 && (c.hits[1]?.startFrames ?? 0) > 256) {
+        multiCue = c;
+        break;
+      }
+    }
+    expect(multiCue.hits.length).toBeGreaterThanOrEqual(2);
+    const rawOffset = multiCue.hits[1]!.startFrames;
+    expect(scaleOffsetByRate(rawOffset, 200)).toBeLessThan(rawOffset);
+
+    const fake = createFakeScheduler();
+    const host = new StarluxAudioHost({ scheduler: fake.scheduler });
+    host.enableFromTrustedGesture({ isTrusted: true }, true);
+    expect(host.submitCue(multiCue.id, { rate100: 200, seed: 7, subject: 1, epoch: 1 })).toBe(true);
+    await host.flushLifecycle();
+
+    let refState = submitCueCommands(createRenderState(), multiCue, 0, 1, 1, 7, 32768, 0, 200, -1, 0);
+    const l = new Float32Array(128);
+    const r = new Float32Array(128);
+    for (let q = 0; q < 48; q++) {
+      host.pumpQuantum(l, r, 128);
+      const blk = renderBlock(refState, 128);
+      refState = blk.state;
+      for (let i = 0; i < 128; i++) {
+        const expL = blk.pcmS16[2 * i]! === 0 ? 0 : blk.pcmS16[2 * i]! / 32768;
+        const expR = blk.pcmS16[2 * i + 1]! === 0 ? 0 : blk.pcmS16[2 * i + 1]! / 32768;
+        expect(l[i]).toBe(expL);
+        expect(r[i]).toBe(expR);
+      }
+    }
+    host.dispose();
+  });
+
+  test("P0-SL3c: defaultBrowserScheduler wires AudioWorkletNode -> destination and handles { type: 'drained' } with stale-gen guard", async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const prevAudioCtx = g.AudioContext;
+    const prevWorkletNode = g.AudioWorkletNode;
+
+    let now = 0;
+    let nextTimerId = 1;
+    const timers = new Map<number, { atUs: number; cb: () => void }>();
+    let addedModuleUrl = "";
+    let connectedDest: unknown = null;
+    const destinationSentinel = { kind: "hardware-speakers" };
+
+    class FakePort {
+      onmessage: ((ev: { readonly data: unknown }) => void) | null = null;
+      peer: FakePort | null = null;
+      postMessage(data: unknown): void {
+        const target = this.peer;
+        if (target !== null && target.onmessage !== null) {
+          target.onmessage({ data });
+        }
+      }
+    }
+
+    class FakeProcessorBase {
+      readonly port = new FakePort();
+    }
+    const ProcessorCtor = createStarluxAudioWorkletProcessor(FakeProcessorBase as unknown as new () => { port: { onmessage: ((ev: { readonly data: never }) => void) | null; postMessage(d: unknown): void } });
+    let liveProcessor: InstanceType<typeof ProcessorCtor> | null = null;
+    let mainPortRef: FakePort | null = null;
+
+    class MockAudioContext implements AudioContextLike {
+      state: "suspended" | "running" | "closed" = "suspended";
+      readonly sampleRate: number;
+      readonly destination = destinationSentinel;
+      readonly audioWorklet = {
+        async addModule(url: string): Promise<void> {
+          addedModuleUrl = url;
+        },
+      };
+      constructor(opts: { sampleRate: number }) {
+        this.sampleRate = opts.sampleRate;
+      }
+      async resume(): Promise<void> { if (this.state === "suspended") this.state = "running"; }
+      async suspend(): Promise<void> { if (this.state === "running") this.state = "suspended"; }
+      async close(): Promise<void> { this.state = "closed"; }
+    }
+
+    class MockAudioWorkletNode implements AudioWorkletNodeLike {
+      readonly port = new FakePort();
+      constructor(_ctx: AudioContextLike, name: string) {
+        expect(name).toBe("starlux-audio-processor");
+        const proc = new ProcessorCtor();
+        const procPort = proc.port as unknown as FakePort;
+        this.port.peer = procPort;
+        procPort.peer = this.port;
+        liveProcessor = proc;
+        mainPortRef = procPort;
+      }
+      connect(dest: unknown): unknown {
+        connectedDest = dest;
+        return dest;
+      }
+      disconnect(): void {
+        connectedDest = null;
+      }
+    }
+
+    g.AudioContext = MockAudioContext;
+    g.AudioWorkletNode = MockAudioWorkletNode;
+    try {
+      const browserSched = defaultBrowserScheduler();
+      const scheduler: AudioHostScheduler = {
+        ...browserSched,
+        nowUs: () => now,
+        setTimer(delayMs, cb) {
+          const id = nextTimerId++;
+          timers.set(id, { atUs: now + delayMs * 1000, cb });
+          return id;
+        },
+        clearTimer(id) { timers.delete(id); },
+      };
+      const host = new StarluxAudioHost({ scheduler, lingerUs: 1600000 });
+      expect(host.enableFromTrustedGesture({ isTrusted: true }, true)).toBe(true);
+      expect(host.submitCue(cueIdBySlug("control.hover"))).toBe(true);
+      await host.flushLifecycle();
+
+      expect(addedModuleUrl.includes("processor-entry.")).toBe(true);
+      expect(connectedDest).toBe(destinationSentinel);
+      expect(liveProcessor).not.toBeNull();
+      expect(host.metrics().heldTokens).toBe(1);
+      expect(host.metrics().contextState).toBe("running");
+
+      // Drive the AudioWorkletProcessor audio thread directly (never calling host.pumpQuantum!)
+      const left = new Float32Array(128);
+      const right = new Float32Array(128);
+      let sawAudio = false;
+      for (let q = 0; q < 40 && host.metrics().heldTokens > 0; q++) {
+        liveProcessor!.process([], [[left, right]]);
+        for (let i = 0; i < 128; i++) {
+          if (left[i] !== 0 || right[i] !== 0) sawAudio = true;
+        }
+      }
+      expect(sawAudio).toBe(true);
+      expect(host.metrics().heldTokens).toBe(0);
+      expect(host.metrics().pendingTimer).toBe(true);
+
+      // Admit a second cue (generation 2), then inject a stale generation-1 drained message: must NOT release!
+      expect(host.submitCue(cueIdBySlug("control.press"))).toBe(true);
+      await host.flushLifecycle();
+      expect(host.metrics().heldTokens).toBe(1);
+      const gen2 = host.metrics().leaseGeneration;
+      mainPortRef!.postMessage({ type: "drained", active: 0, quanta: 20, hostGen: gen2 - 1 });
+      expect(host.metrics().heldTokens).toBe(1);
+
+      // Drain generation 2 cleanly and verify 1.6s auto-suspend
+      for (let q = 0; q < 40 && host.metrics().heldTokens > 0; q++) {
+        liveProcessor!.process([], [[left, right]]);
+      }
+      expect(host.metrics().heldTokens).toBe(0);
+      now += 1600000;
+      for (const [id, t] of [...timers.entries()]) {
+        if (t.atUs <= now) {
+          timers.delete(id);
+          t.cb();
+        }
+      }
+      await host.flushLifecycle();
+      expect(host.metrics().contextState).toBe("suspended");
+      host.dispose();
+    } finally {
+      if (prevAudioCtx === undefined) delete g.AudioContext;
+      else g.AudioContext = prevAudioCtx;
+      if (prevWorkletNode === undefined) delete g.AudioWorkletNode;
+      else g.AudioWorkletNode = prevWorkletNode;
+    }
   });
 });
