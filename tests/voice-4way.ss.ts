@@ -4,7 +4,9 @@
 // synthetic speech cadence, and ALL 28 styles across Families A..E!
 
 import { sin64 } from "../ss/physics/math.ss.ts";
+import type { LuxClock } from "../ss/lux/wake.ss.ts";
 import {
+  type VoiceMachineState,
   VOICE_ACT,
   VOICE_CONFIRM,
   VOICE_DONE,
@@ -18,14 +20,25 @@ import {
   voiceHeldWakeTokens,
 } from "../ss/voice/state.ss.ts";
 import {
+  type VoiceSignalState,
   createVoiceSignalState,
   processPcmFrame,
   signalBandTotalEnergy,
   synthesizeSpeechCadence,
 } from "../ss/voice/signal.ss.ts";
-import { VOICE_PRIM_STRIDE, evalVoiceStyle } from "../ss/voice/styles.ss.ts";
-import { VOICE_STYLE_COUNT, getVoiceStyleMeta } from "../ss/voice/catalog.ss.ts";
 import {
+  type VoicePrimitiveFrame,
+  VOICE_PRIM_STRIDE,
+  evalVoiceStyle,
+} from "../ss/voice/styles.ss.ts";
+import {
+  type VoiceStyleMeta,
+  VOICE_STYLE_COUNT,
+  getVoiceStyleMeta,
+} from "../ss/voice/catalog.ss.ts";
+import {
+  type VoiceFrameResult,
+  type VoiceRuntimeState,
   createVoiceRuntime,
   setVoiceRuntimeStyle,
   stepVoiceFrame,
