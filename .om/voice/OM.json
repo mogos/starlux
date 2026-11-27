@@ -1,7 +1,7 @@
 {
   "schema": "om-project/0.1",
   "code_root": "../..",
-  "code_sha": "2324b0858c803d331e400e131137420afa6e6f02",
+  "code_sha": "c2390f8aa407f00df20a5dc88663f07643eaf331",
   "models": [
     {
       "name": "starluxvoice",

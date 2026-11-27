@@ -2,7 +2,7 @@
 
 Author: MOGOS Collective
 
-Pinned source: `2324b0858c803d331e400e131137420afa6e6f02`. Structured OM-ANCHORS/1 rows bind StarluxVoice states, actions, and claims to `ss/voice/` and `.om/voice/RULESET.md`.
+Pinned source: `c2390f8aa407f00df20a5dc88663f07643eaf331`. Structured OM-ANCHORS/1 rows bind StarluxVoice states, actions, and claims to `ss/voice/` and `.om/voice/RULESET.md`.
 
 | Model element | Citation | Quote |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ Pinned source: `2324b0858c803d331e400e131137420afa6e6f02`. Structured OM-ANCHORS
 
 ## Structured source anchors (OM-ANCHORS/1)
 
-code_sha: 2324b0858c803d331e400e131137420afa6e6f02
+code_sha: c2390f8aa407f00df20a5dc88663f07643eaf331
 
 | Model element | File | Start line | End line | SHA-256 |
 | --- | --- | ---: | ---: | --- |
