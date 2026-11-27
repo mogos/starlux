@@ -25,7 +25,7 @@ import { instantiateMagneticWasm, magneticWasm } from "@mogos/starlux/wasm/magne
 import * as root from "@mogos/starlux";
 
 const pkg = JSON.parse(readFileSync("node_modules/@mogos/starlux/package.json", "utf8"));
-assert.deepEqual(Object.keys(pkg.exports), [".", "./lux", "./physics", "./sensory", "./living-state", "./dom", "./c", "./magnetic-tiling", "./dom/magnetic", "./wasm/magnetic"]);
+assert.deepEqual(Object.keys(pkg.exports), [".", "./lux", "./physics", "./sensory", "./living-state", "./voice", "./dom", "./c", "./magnetic-tiling", "./dom/magnetic", "./wasm/magnetic"]);
 assert.equal(pkg.license, "MIT");
 assert.equal(pkg.type, "module");
 assert.equal(pkg.sideEffects, false);
@@ -42,5 +42,5 @@ assert.equal(root.mountMagneticTiling, mountMagneticTiling);
 assert.equal(root.instantiateMagneticWasm, instantiateMagneticWasm);
 const wasm = await instantiateMagneticWasm();
 assert.deepEqual(wasm.starluxMagneticFrame([]), []);
-console.log("Packed ESM and all 10 exports load with zero runtime dependencies");
+console.log("Packed ESM and all 11 exports load with zero runtime dependencies");
 JS
