@@ -1,0 +1,1 @@
+{"model":"starluxlight","verdict":"CLOSED","failing_claims":[],"distinct":290,"distinct_tolerance_pct":0,"bound":"saturated@8","status":{"hidden_source_preserves_reflections":"must-hold","idle_light_zero_ticks":"must-hold","no_clean_evaluation":"must-hold","blur_and_dispersion_bounded":"must-hold","reduced_motion_static_key":"must-hold","glyph_follows_visibility":"must-hold"}}

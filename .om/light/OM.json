@@ -1,0 +1,15 @@
+{
+  "schema": "om-project/0.1",
+  "code_root": "../..",
+  "code_sha": "e614d23964c6dafecbbc41405ead3d350449fddf",
+  "models": [
+    {
+      "name": "starluxlight",
+      "source": "light.om",
+      "symmetry": null,
+      "store": "arena",
+      "domains": 1,
+      "gate": "required"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+om 0.1
+model starluxlight
+
+var lamp: 0..2 = 0
+var show: bool = true
+var glyph: bool = false
+var mounted: bool = true
+var reduced: bool = false
+var light: bool = false
+var bright: bool = false
+var dirty: bool = false
+var token: bool = false
+var evaluated: bool = false
+var rimReference: 0..5 = 0
+var rimProduct: 0..5 = 0
+var causticReference: 0..5 = 0
+var causticProduct: 0..5 = 0
+var blur: 0..17 = 16
+var split: 0..3 = 2
+var stale: bool = false
+
+action sample_left by host
+  when mounted and not reduced and (not light or lamp != 1)
+  then lamp := 1, light := true, glyph := show, dirty := true, token := true, evaluated := false, stale := false
+action sample_right by host
+  when mounted and not reduced and (not light or lamp != 2)
+  then lamp := 2, light := true, glyph := show, dirty := true, token := true, evaluated := false, stale := false
+action sample_reduced by host
+  when mounted and reduced
+  then lamp := 0, evaluated := false, stale := false
+action toggle_off by host
+  when show
+  then show := false, glyph := false
+action toggle_on by host
+  when not show
+  then show := true, glyph := mounted and light
+action theme by host
+  when mounted and light
+  then bright := not bright, dirty := true, token := not reduced, evaluated := false, stale := false
+action reduce by host
+  when mounted and not reduced and light
+  then reduced := true, lamp := 0, dirty := true, token := false, split := 0, evaluated := false, stale := false
+action flush by source
+  when mounted and dirty
+  then rimReference := lamp + (if bright then 3 else 1), rimProduct := lamp + (if bright then 3 else 1), causticReference := 3 - lamp + (if bright then 2 else 0), causticProduct := 3 - lamp + (if bright then 2 else 0), evaluated := true, dirty := false, token := false, stale := false
+action settle by source
+  when mounted and not dirty
+  then evaluated := false, token := false, stale := false
+action clean_flush by source
+  when mounted and not dirty
+  then evaluated := false, token := false, stale := false
+action cancel by host
+  when mounted
+  then dirty := false, token := false, evaluated := false, stale := true
+action hide by host
+  when mounted
+  then mounted := false, glyph := false, dirty := false, token := false, evaluated := false, stale := true
+action resume by host
+  when not mounted
+  then mounted := true, glyph := show and light, dirty := light, token := light and not reduced, evaluated := false, stale := false
+action deliver_stale by source
+  when stale
+  then evaluated := false
+action apply_recipe by author
+  when mounted
+  then blur := 16, split := (if reduced then 0 else 2)
+
+claim hidden_source_preserves_reflections "Both optical worlds reflect and transmit equally throughout the tape." rule R-006
+  always (rimReference == rimProduct and causticReference == causticProduct)
+claim idle_light_zero_ticks "Settled optical work uses zero leases and a stale callback cannot evaluate." rule R-007
+  always (((not dirty) implies (not token)) and (stale implies (not evaluated)))
+claim no_clean_evaluation "An evaluating transition commits a lit sample and retires its dirty work." rule R-010
+  always (evaluated implies (rimProduct > 0 and causticProduct > 0 and mounted and not dirty))
+claim blur_and_dispersion_bounded "Blur and split stay within the retained optical budget." rule R-008
+  always (blur <= 16 and split <= 2)
+claim reduced_motion_static_key "Motion reduction pins the key and retires animations." rule R-009
+  always (reduced implies (lamp == 0 and split == 0 and not token))
+claim glyph_follows_visibility "Glyph commands exist only for visible sources on mounted surfaces." rule R-011
+  always (glyph == (mounted and show and light))

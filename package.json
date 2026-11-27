@@ -7,6 +7,7 @@
   "sideEffects": false,
   "exports": {
     ".": { "types": "./dist/src/index.d.ts", "default": "./dist/src/index.js" },
+    "./light": { "types": "./dist/src/light/index.d.ts", "default": "./dist/src/light/index.js" },
     "./lux": { "types": "./dist/src/lux.d.ts", "default": "./dist/src/lux.js" },
     "./physics": { "types": "./dist/src/physics.d.ts", "default": "./dist/src/physics.js" },
     "./sensory": { "types": "./dist/ss/sensory.ss.d.ts", "default": "./dist/ss/sensory.ss.js" },
@@ -23,7 +24,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "build:wasm": "./c/build-wasm.sh dist/wasm/magnetic",
-    "prepack": "npm run build && npm run build:wasm",
+    "build:wasm:light": "./c/light/build-wasm.sh dist/wasm/light",
+    "prepack": "npm run build && npm run build:wasm && npm run build:wasm:light",
     "test": "./gate.sh"
   }
 }
