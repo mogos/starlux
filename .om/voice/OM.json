@@ -1,0 +1,15 @@
+{
+  "schema": "om-project/0.1",
+  "code_root": "../..",
+  "code_sha": "0000000000000000000000000000000000000000",
+  "models": [
+    {
+      "name": "starluxvoice",
+      "source": "starluxvoice.om",
+      "symmetry": null,
+      "store": "arena",
+      "domains": 1,
+      "gate": "required"
+    }
+  ]
+}
