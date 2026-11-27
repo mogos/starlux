@@ -1,0 +1,23 @@
+{
+  "name": "@mogos/starlux",
+  "version": "0.1.0",
+  "description": "Portable living physics and a wake-on-interaction frame clock",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": { "types": "./dist/src/index.d.ts", "default": "./dist/src/index.js" },
+    "./lux": { "types": "./dist/src/lux.d.ts", "default": "./dist/src/lux.js" },
+    "./physics": { "types": "./dist/src/physics.d.ts", "default": "./dist/src/physics.js" },
+    "./sensory": { "types": "./dist/ss/sensory.ss.d.ts", "default": "./dist/ss/sensory.ss.js" },
+    "./living-state": { "types": "./dist/ss/living-state.ss.d.ts", "default": "./dist/ss/living-state.ss.js" },
+    "./dom": { "types": "./dist/src/dom/controller.d.ts", "default": "./dist/src/dom/controller.js" },
+    "./c": { "types": "./c/index.d.ts", "default": "./c/index.js" }
+  },
+  "files": ["dist", "ss", "c", "FLOORS.jsonl"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "test": "./gate.sh"
+  }
+}
